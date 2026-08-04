@@ -1,0 +1,41 @@
+{
+  "run_id": "mock-agentic-run-001",
+  "issue_summary": "The user reports that clicking Save on the profile page does not persist edited profile details.",
+  "meeting_issue_context": {
+    "transcript_segments": [
+      {
+        "timestamp": "00:01:12",
+        "text": "When I click save here, nothing happens and the old name comes back after refresh."
+      }
+    ],
+    "screenshot_context": [
+      {
+        "timestamp": "00:01:10",
+        "path": "data/extracted_frames/profile_save_button.png",
+        "description": "Profile page with the Save button visible below editable name and email fields."
+      }
+    ]
+  },
+  "repository_context": {
+    "repo_tree": "src/\n  pages/Profile.jsx\n  api/profile.js\n  components/Button.jsx",
+    "relevant_files": [
+      {
+        "path": "src/pages/Profile.jsx",
+        "summary": "Profile form component containing local state and the Save button handler.",
+        "symbols": ["ProfilePage", "handleSave"]
+      },
+      {
+        "path": "src/api/profile.js",
+        "summary": "Client helper for profile read and update API calls.",
+        "symbols": ["fetchProfile", "updateProfile"]
+      }
+    ]
+  },
+  "build_commands": ["npm test", "npm run build"],
+  "constraints": [
+    "Make the minimum required change.",
+    "Preserve existing component styling.",
+    "Do not modify authentication or routing files."
+  ],
+  "max_review_attempts": 3
+}
