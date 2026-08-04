@@ -1,0 +1,7 @@
+crewai
+crewai-tools
+groq
+pygithub
+opencv-python
+faster-whisper
+python-dotenv
