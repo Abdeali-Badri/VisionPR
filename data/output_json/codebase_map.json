@@ -1,0 +1,1283 @@
+{
+  "file_tree": ".\n|-- .agents/\n|-- data/\n|   |-- extracted_frames/\n|   |   `-- .gitkeep\n|   |-- input_videos/\n|   |   `-- .gitkeep\n|   `-- output_json/\n|       |-- .gitkeep\n|       `-- codebase_map.json\n|-- mock_data/\n|   `-- agentic_input.json\n|-- src/\n|   |-- __init__.py\n|   |-- codebase_mapper.py\n|   |-- crew_engine.py\n|   |-- extract_video.py\n|   |-- generate_summary.py\n|   |-- github_publisher.py\n|   |-- hitl_review_gate.py\n|   |-- prompts.py\n|   |-- schemas.py\n|   `-- tools.py\n|-- tests/\n|   |-- test_crew_engine.py\n|   |-- test_github_publisher.py\n|   |-- test_hitl_review_gate.py\n|   `-- test_main.py\n|-- .gitignore\n|-- AGENTS_AND_SKILLS.md\n|-- ARCHITECTURE.md\n|-- main.py\n|-- README.md\n`-- requirements.txt",
+  "code_symbols": [
+    {
+      "type": "function",
+      "name": "find_project_root",
+      "file": "src/codebase_mapper.py",
+      "line": 20
+    },
+    {
+      "type": "function",
+      "name": "should_skip",
+      "file": "src/codebase_mapper.py",
+      "line": 33
+    },
+    {
+      "type": "function",
+      "name": "visible_children",
+      "file": "src/codebase_mapper.py",
+      "line": 38
+    },
+    {
+      "type": "function",
+      "name": "iter_repo_files",
+      "file": "src/codebase_mapper.py",
+      "line": 44
+    },
+    {
+      "type": "function",
+      "name": "build_file_tree",
+      "file": "src/codebase_mapper.py",
+      "line": 53
+    },
+    {
+      "type": "function",
+      "name": "build_file_tree.add_entries",
+      "file": "src/codebase_mapper.py",
+      "line": 58
+    },
+    {
+      "type": "class",
+      "name": "SymbolVisitor",
+      "file": "src/codebase_mapper.py",
+      "line": 78
+    },
+    {
+      "type": "method",
+      "name": "SymbolVisitor.__init__",
+      "file": "src/codebase_mapper.py",
+      "line": 81
+    },
+    {
+      "type": "method",
+      "name": "SymbolVisitor.visit_ClassDef",
+      "file": "src/codebase_mapper.py",
+      "line": 87
+    },
+    {
+      "type": "method",
+      "name": "SymbolVisitor.visit_FunctionDef",
+      "file": "src/codebase_mapper.py",
+      "line": 102
+    },
+    {
+      "type": "method",
+      "name": "SymbolVisitor.visit_AsyncFunctionDef",
+      "file": "src/codebase_mapper.py",
+      "line": 105
+    },
+    {
+      "type": "method",
+      "name": "SymbolVisitor._visit_function",
+      "file": "src/codebase_mapper.py",
+      "line": 108
+    },
+    {
+      "type": "function",
+      "name": "extract_python_symbols",
+      "file": "src/codebase_mapper.py",
+      "line": 131
+    },
+    {
+      "type": "function",
+      "name": "build_codebase_map",
+      "file": "src/codebase_mapper.py",
+      "line": 145
+    },
+    {
+      "type": "function",
+      "name": "save_codebase_map",
+      "file": "src/codebase_mapper.py",
+      "line": 158
+    },
+    {
+      "type": "function",
+      "name": "main",
+      "file": "src/codebase_mapper.py",
+      "line": 167
+    },
+    {
+      "type": "class",
+      "name": "ArchitectAgent",
+      "file": "src/crew_engine.py",
+      "line": 26
+    },
+    {
+      "type": "method",
+      "name": "ArchitectAgent.create_plan",
+      "file": "src/crew_engine.py",
+      "line": 27
+    },
+    {
+      "type": "class",
+      "name": "CoderAgent",
+      "file": "src/crew_engine.py",
+      "line": 31
+    },
+    {
+      "type": "method",
+      "name": "CoderAgent.implement_plan",
+      "file": "src/crew_engine.py",
+      "line": 32
+    },
+    {
+      "type": "class",
+      "name": "ReviewerAgent",
+      "file": "src/crew_engine.py",
+      "line": 41
+    },
+    {
+      "type": "method",
+      "name": "ReviewerAgent.review_patch",
+      "file": "src/crew_engine.py",
+      "line": 42
+    },
+    {
+      "type": "class",
+      "name": "HeuristicArchitectAgent",
+      "file": "src/crew_engine.py",
+      "line": 51
+    },
+    {
+      "type": "method",
+      "name": "HeuristicArchitectAgent.create_plan",
+      "file": "src/crew_engine.py",
+      "line": 54
+    },
+    {
+      "type": "class",
+      "name": "PlaceholderCoderAgent",
+      "file": "src/crew_engine.py",
+      "line": 92
+    },
+    {
+      "type": "method",
+      "name": "PlaceholderCoderAgent.implement_plan",
+      "file": "src/crew_engine.py",
+      "line": 95
+    },
+    {
+      "type": "class",
+      "name": "RuleBasedReviewerAgent",
+      "file": "src/crew_engine.py",
+      "line": 122
+    },
+    {
+      "type": "method",
+      "name": "RuleBasedReviewerAgent.review_patch",
+      "file": "src/crew_engine.py",
+      "line": 125
+    },
+    {
+      "type": "function",
+      "name": "load_agentic_input",
+      "file": "src/crew_engine.py",
+      "line": 156
+    },
+    {
+      "type": "function",
+      "name": "build_revision_request",
+      "file": "src/crew_engine.py",
+      "line": 162
+    },
+    {
+      "type": "function",
+      "name": "run_agentic_workflow",
+      "file": "src/crew_engine.py",
+      "line": 181
+    },
+    {
+      "type": "function",
+      "name": "run_agentic_workflow_from_file",
+      "file": "src/crew_engine.py",
+      "line": 248
+    },
+    {
+      "type": "function",
+      "name": "retry_operation",
+      "file": "src/extract_video.py",
+      "line": 140
+    },
+    {
+      "type": "function",
+      "name": "parse_json_response",
+      "file": "src/extract_video.py",
+      "line": 181
+    },
+    {
+      "type": "function",
+      "name": "run_command",
+      "file": "src/extract_video.py",
+      "line": 256
+    },
+    {
+      "type": "function",
+      "name": "validate_video",
+      "file": "src/extract_video.py",
+      "line": 285
+    },
+    {
+      "type": "function",
+      "name": "get_video_metadata",
+      "file": "src/extract_video.py",
+      "line": 322
+    },
+    {
+      "type": "function",
+      "name": "extract_audio",
+      "file": "src/extract_video.py",
+      "line": 381
+    },
+    {
+      "type": "function",
+      "name": "transcribe_audio",
+      "file": "src/extract_video.py",
+      "line": 435
+    },
+    {
+      "type": "function",
+      "name": "transcribe_audio.call_whisper",
+      "file": "src/extract_video.py",
+      "line": 447
+    },
+    {
+      "type": "function",
+      "name": "translate_to_english",
+      "file": "src/extract_video.py",
+      "line": 576
+    },
+    {
+      "type": "function",
+      "name": "translate_to_english.call_translation",
+      "file": "src/extract_video.py",
+      "line": 617
+    },
+    {
+      "type": "function",
+      "name": "extract_key_points",
+      "file": "src/extract_video.py",
+      "line": 656
+    },
+    {
+      "type": "function",
+      "name": "extract_key_points.call_key_points",
+      "file": "src/extract_video.py",
+      "line": 705
+    },
+    {
+      "type": "function",
+      "name": "calculate_key_point_timestamps",
+      "file": "src/extract_video.py",
+      "line": 772
+    },
+    {
+      "type": "function",
+      "name": "calculate_key_point_timestamps.normalize_text",
+      "file": "src/extract_video.py",
+      "line": 785
+    },
+    {
+      "type": "function",
+      "name": "extract_context_frames",
+      "file": "src/extract_video.py",
+      "line": 861
+    },
+    {
+      "type": "function",
+      "name": "analyze_frames_with_groq",
+      "file": "src/extract_video.py",
+      "line": 964
+    },
+    {
+      "type": "function",
+      "name": "analyze_frames_with_groq.call_vision",
+      "file": "src/extract_video.py",
+      "line": 1072
+    },
+    {
+      "type": "function",
+      "name": "build_video_intelligence",
+      "file": "src/extract_video.py",
+      "line": 1125
+    },
+    {
+      "type": "function",
+      "name": "process_video",
+      "file": "src/extract_video.py",
+      "line": 1160
+    },
+    {
+      "type": "function",
+      "name": "main",
+      "file": "src/extract_video.py",
+      "line": 1434
+    },
+    {
+      "type": "function",
+      "name": "utc_now",
+      "file": "src/github_publisher.py",
+      "line": 51
+    },
+    {
+      "type": "class",
+      "name": "VisionPRError",
+      "file": "src/github_publisher.py",
+      "line": 55
+    },
+    {
+      "type": "method",
+      "name": "VisionPRError.__init__",
+      "file": "src/github_publisher.py",
+      "line": 58
+    },
+    {
+      "type": "method",
+      "name": "VisionPRError.to_dict",
+      "file": "src/github_publisher.py",
+      "line": 74
+    },
+    {
+      "type": "class",
+      "name": "GitResult",
+      "file": "src/github_publisher.py",
+      "line": 87
+    },
+    {
+      "type": "method",
+      "name": "GitResult.to_dict",
+      "file": "src/github_publisher.py",
+      "line": 93
+    },
+    {
+      "type": "function",
+      "name": "_load_environment",
+      "file": "src/github_publisher.py",
+      "line": 102
+    },
+    {
+      "type": "function",
+      "name": "_secret_values",
+      "file": "src/github_publisher.py",
+      "line": 107
+    },
+    {
+      "type": "function",
+      "name": "sanitize_text",
+      "file": "src/github_publisher.py",
+      "line": 111
+    },
+    {
+      "type": "function",
+      "name": "run_git",
+      "file": "src/github_publisher.py",
+      "line": 120
+    },
+    {
+      "type": "function",
+      "name": "_require_text",
+      "file": "src/github_publisher.py",
+      "line": 184
+    },
+    {
+      "type": "function",
+      "name": "_normalize_relative_path",
+      "file": "src/github_publisher.py",
+      "line": 195
+    },
+    {
+      "type": "function",
+      "name": "validate_changed_files",
+      "file": "src/github_publisher.py",
+      "line": 213
+    },
+    {
+      "type": "function",
+      "name": "validate_repository",
+      "file": "src/github_publisher.py",
+      "line": 230
+    },
+    {
+      "type": "function",
+      "name": "_parse_remote_repository",
+      "file": "src/github_publisher.py",
+      "line": 251
+    },
+    {
+      "type": "function",
+      "name": "_status_paths",
+      "file": "src/github_publisher.py",
+      "line": 266
+    },
+    {
+      "type": "function",
+      "name": "ensure_only_intended_worktree_changes",
+      "file": "src/github_publisher.py",
+      "line": 287
+    },
+    {
+      "type": "function",
+      "name": "_slug",
+      "file": "src/github_publisher.py",
+      "line": 299
+    },
+    {
+      "type": "function",
+      "name": "create_or_checkout_feature_branch",
+      "file": "src/github_publisher.py",
+      "line": 304
+    },
+    {
+      "type": "function",
+      "name": "create_or_checkout_feature_branch.verify_local_ownership",
+      "file": "src/github_publisher.py",
+      "line": 315
+    },
+    {
+      "type": "function",
+      "name": "stage_intended_files",
+      "file": "src/github_publisher.py",
+      "line": 346
+    },
+    {
+      "type": "function",
+      "name": "compute_patch_fingerprint",
+      "file": "src/github_publisher.py",
+      "line": 368
+    },
+    {
+      "type": "function",
+      "name": "commit_changes",
+      "file": "src/github_publisher.py",
+      "line": 395
+    },
+    {
+      "type": "function",
+      "name": "push_branch",
+      "file": "src/github_publisher.py",
+      "line": 402
+    },
+    {
+      "type": "function",
+      "name": "_github_client",
+      "file": "src/github_publisher.py",
+      "line": 420
+    },
+    {
+      "type": "function",
+      "name": "_github_repository",
+      "file": "src/github_publisher.py",
+      "line": 429
+    },
+    {
+      "type": "function",
+      "name": "create_or_get_pull_request",
+      "file": "src/github_publisher.py",
+      "line": 448
+    },
+    {
+      "type": "function",
+      "name": "post_engineer_summary",
+      "file": "src/github_publisher.py",
+      "line": 466
+    },
+    {
+      "type": "function",
+      "name": "_state_directory",
+      "file": "src/github_publisher.py",
+      "line": 483
+    },
+    {
+      "type": "function",
+      "name": "state_file_path",
+      "file": "src/github_publisher.py",
+      "line": 488
+    },
+    {
+      "type": "function",
+      "name": "save_state_atomic",
+      "file": "src/github_publisher.py",
+      "line": 492
+    },
+    {
+      "type": "function",
+      "name": "load_pr_state",
+      "file": "src/github_publisher.py",
+      "line": 516
+    },
+    {
+      "type": "function",
+      "name": "_markdown_list",
+      "file": "src/github_publisher.py",
+      "line": 529
+    },
+    {
+      "type": "function",
+      "name": "_build_pr_body",
+      "file": "src/github_publisher.py",
+      "line": 534
+    },
+    {
+      "type": "function",
+      "name": "_engineer_summary",
+      "file": "src/github_publisher.py",
+      "line": 586
+    },
+    {
+      "type": "function",
+      "name": "publish_pull_request",
+      "file": "src/github_publisher.py",
+      "line": 610
+    },
+    {
+      "type": "function",
+      "name": "_value",
+      "file": "src/hitl_review_gate.py",
+      "line": 36
+    },
+    {
+      "type": "function",
+      "name": "_iso",
+      "file": "src/hitl_review_gate.py",
+      "line": 42
+    },
+    {
+      "type": "function",
+      "name": "_author",
+      "file": "src/hitl_review_gate.py",
+      "line": 50
+    },
+    {
+      "type": "function",
+      "name": "_is_service_account",
+      "file": "src/hitl_review_gate.py",
+      "line": 57
+    },
+    {
+      "type": "function",
+      "name": "_is_trusted_author",
+      "file": "src/hitl_review_gate.py",
+      "line": 63
+    },
+    {
+      "type": "function",
+      "name": "_serialize_review",
+      "file": "src/hitl_review_gate.py",
+      "line": 68
+    },
+    {
+      "type": "function",
+      "name": "_serialize_issue_comment",
+      "file": "src/hitl_review_gate.py",
+      "line": 83
+    },
+    {
+      "type": "function",
+      "name": "_serialize_inline_comment",
+      "file": "src/hitl_review_gate.py",
+      "line": 96
+    },
+    {
+      "type": "function",
+      "name": "_github_call",
+      "file": "src/hitl_review_gate.py",
+      "line": 109
+    },
+    {
+      "type": "function",
+      "name": "fetch_pull_request_state",
+      "file": "src/hitl_review_gate.py",
+      "line": 138
+    },
+    {
+      "type": "function",
+      "name": "fetch_pull_request_state.fetch",
+      "file": "src/hitl_review_gate.py",
+      "line": 141
+    },
+    {
+      "type": "function",
+      "name": "determine_human_review_status",
+      "file": "src/hitl_review_gate.py",
+      "line": 161
+    },
+    {
+      "type": "function",
+      "name": "_required_approval_count",
+      "file": "src/hitl_review_gate.py",
+      "line": 195
+    },
+    {
+      "type": "function",
+      "name": "_feedback_key",
+      "file": "src/hitl_review_gate.py",
+      "line": 207
+    },
+    {
+      "type": "function",
+      "name": "_is_actionable_body",
+      "file": "src/hitl_review_gate.py",
+      "line": 211
+    },
+    {
+      "type": "function",
+      "name": "_collect_feedback_from_snapshot",
+      "file": "src/hitl_review_gate.py",
+      "line": 216
+    },
+    {
+      "type": "function",
+      "name": "collect_new_engineer_feedback",
+      "file": "src/hitl_review_gate.py",
+      "line": 256
+    },
+    {
+      "type": "function",
+      "name": "create_redo_request",
+      "file": "src/hitl_review_gate.py",
+      "line": 265
+    },
+    {
+      "type": "function",
+      "name": "execute_feedback_iteration",
+      "file": "src/hitl_review_gate.py",
+      "line": 286
+    },
+    {
+      "type": "function",
+      "name": "_validate_correction_result",
+      "file": "src/hitl_review_gate.py",
+      "line": 310
+    },
+    {
+      "type": "function",
+      "name": "_resolution_table",
+      "file": "src/hitl_review_gate.py",
+      "line": 376
+    },
+    {
+      "type": "function",
+      "name": "publish_iteration_update",
+      "file": "src/hitl_review_gate.py",
+      "line": 391
+    },
+    {
+      "type": "function",
+      "name": "save_pr_state_atomic",
+      "file": "src/hitl_review_gate.py",
+      "line": 425
+    },
+    {
+      "type": "function",
+      "name": "_transition",
+      "file": "src/hitl_review_gate.py",
+      "line": 429
+    },
+    {
+      "type": "function",
+      "name": "_error_result",
+      "file": "src/hitl_review_gate.py",
+      "line": 445
+    },
+    {
+      "type": "function",
+      "name": "_refresh_persisted_state",
+      "file": "src/hitl_review_gate.py",
+      "line": 455
+    },
+    {
+      "type": "function",
+      "name": "_stop_requested",
+      "file": "src/hitl_review_gate.py",
+      "line": 465
+    },
+    {
+      "type": "function",
+      "name": "_validation_summary",
+      "file": "src/hitl_review_gate.py",
+      "line": 473
+    },
+    {
+      "type": "function",
+      "name": "_processed_map",
+      "file": "src/hitl_review_gate.py",
+      "line": 485
+    },
+    {
+      "type": "function",
+      "name": "_mark_feedback_processed",
+      "file": "src/hitl_review_gate.py",
+      "line": 493
+    },
+    {
+      "type": "function",
+      "name": "_prepare_branch",
+      "file": "src/hitl_review_gate.py",
+      "line": 506
+    },
+    {
+      "type": "function",
+      "name": "_status_is_dirty",
+      "file": "src/hitl_review_gate.py",
+      "line": 528
+    },
+    {
+      "type": "function",
+      "name": "_complete_pending_publication",
+      "file": "src/hitl_review_gate.py",
+      "line": 532
+    },
+    {
+      "type": "function",
+      "name": "_process_once",
+      "file": "src/hitl_review_gate.py",
+      "line": 584
+    },
+    {
+      "type": "function",
+      "name": "run_human_review_gate",
+      "file": "src/hitl_review_gate.py",
+      "line": 703
+    },
+    {
+      "type": "class",
+      "name": "TranscriptSegment",
+      "file": "src/schemas.py",
+      "line": 23
+    },
+    {
+      "type": "class",
+      "name": "ScreenshotContext",
+      "file": "src/schemas.py",
+      "line": 31
+    },
+    {
+      "type": "class",
+      "name": "RepositoryFileContext",
+      "file": "src/schemas.py",
+      "line": 40
+    },
+    {
+      "type": "class",
+      "name": "AgenticInput",
+      "file": "src/schemas.py",
+      "line": 49
+    },
+    {
+      "type": "method",
+      "name": "AgenticInput.from_dict",
+      "file": "src/schemas.py",
+      "line": 61
+    },
+    {
+      "type": "method",
+      "name": "AgenticInput.to_dict",
+      "file": "src/schemas.py",
+      "line": 72
+    },
+    {
+      "type": "class",
+      "name": "ArchitectPlan",
+      "file": "src/schemas.py",
+      "line": 77
+    },
+    {
+      "type": "method",
+      "name": "ArchitectPlan.from_dict",
+      "file": "src/schemas.py",
+      "line": 89
+    },
+    {
+      "type": "method",
+      "name": "ArchitectPlan.to_dict",
+      "file": "src/schemas.py",
+      "line": 100
+    },
+    {
+      "type": "class",
+      "name": "CoderResult",
+      "file": "src/schemas.py",
+      "line": 105
+    },
+    {
+      "type": "method",
+      "name": "CoderResult.from_dict",
+      "file": "src/schemas.py",
+      "line": 116
+    },
+    {
+      "type": "method",
+      "name": "CoderResult.to_dict",
+      "file": "src/schemas.py",
+      "line": 126
+    },
+    {
+      "type": "class",
+      "name": "ReviewerResult",
+      "file": "src/schemas.py",
+      "line": 131
+    },
+    {
+      "type": "method",
+      "name": "ReviewerResult.from_dict",
+      "file": "src/schemas.py",
+      "line": 144
+    },
+    {
+      "type": "method",
+      "name": "ReviewerResult.to_dict",
+      "file": "src/schemas.py",
+      "line": 157
+    },
+    {
+      "type": "class",
+      "name": "RevisionRequest",
+      "file": "src/schemas.py",
+      "line": 162
+    },
+    {
+      "type": "method",
+      "name": "RevisionRequest.to_dict",
+      "file": "src/schemas.py",
+      "line": 171
+    },
+    {
+      "type": "class",
+      "name": "AgentWorkflowResult",
+      "file": "src/schemas.py",
+      "line": 176
+    },
+    {
+      "type": "method",
+      "name": "AgentWorkflowResult.to_dict",
+      "file": "src/schemas.py",
+      "line": 188
+    },
+    {
+      "type": "class",
+      "name": "ToolSafetyError",
+      "file": "src/tools.py",
+      "line": 24
+    },
+    {
+      "type": "function",
+      "name": "_repo_root",
+      "file": "src/tools.py",
+      "line": 28
+    },
+    {
+      "type": "function",
+      "name": "resolve_repo_path",
+      "file": "src/tools.py",
+      "line": 32
+    },
+    {
+      "type": "function",
+      "name": "read_file",
+      "file": "src/tools.py",
+      "line": 48
+    },
+    {
+      "type": "function",
+      "name": "write_file",
+      "file": "src/tools.py",
+      "line": 54
+    },
+    {
+      "type": "function",
+      "name": "run_build_test",
+      "file": "src/tools.py",
+      "line": 62
+    },
+    {
+      "type": "function",
+      "name": "run_build_plan",
+      "file": "src/tools.py",
+      "line": 101
+    },
+    {
+      "type": "function",
+      "name": "sample_agentic_input",
+      "file": "tests/test_crew_engine.py",
+      "line": 7
+    },
+    {
+      "type": "class",
+      "name": "StubArchitect",
+      "file": "tests/test_crew_engine.py",
+      "line": 33
+    },
+    {
+      "type": "method",
+      "name": "StubArchitect.create_plan",
+      "file": "tests/test_crew_engine.py",
+      "line": 34
+    },
+    {
+      "type": "class",
+      "name": "SuccessfulCoder",
+      "file": "tests/test_crew_engine.py",
+      "line": 45
+    },
+    {
+      "type": "method",
+      "name": "SuccessfulCoder.implement_plan",
+      "file": "tests/test_crew_engine.py",
+      "line": 46
+    },
+    {
+      "type": "class",
+      "name": "EmptyCoder",
+      "file": "tests/test_crew_engine.py",
+      "line": 54
+    },
+    {
+      "type": "method",
+      "name": "EmptyCoder.__init__",
+      "file": "tests/test_crew_engine.py",
+      "line": 55
+    },
+    {
+      "type": "method",
+      "name": "EmptyCoder.implement_plan",
+      "file": "tests/test_crew_engine.py",
+      "line": 58
+    },
+    {
+      "type": "class",
+      "name": "ApprovingReviewer",
+      "file": "tests/test_crew_engine.py",
+      "line": 67
+    },
+    {
+      "type": "method",
+      "name": "ApprovingReviewer.review_patch",
+      "file": "tests/test_crew_engine.py",
+      "line": 68
+    },
+    {
+      "type": "class",
+      "name": "CrewEngineTests",
+      "file": "tests/test_crew_engine.py",
+      "line": 77
+    },
+    {
+      "type": "method",
+      "name": "CrewEngineTests.test_approved_patch_is_ready_for_pr_publishing",
+      "file": "tests/test_crew_engine.py",
+      "line": 78
+    },
+    {
+      "type": "method",
+      "name": "CrewEngineTests.test_default_reviewer_rejects_empty_patch_until_retry_limit",
+      "file": "tests/test_crew_engine.py",
+      "line": 92
+    },
+    {
+      "type": "method",
+      "name": "CrewEngineTests.test_default_architect_uses_repository_context_file_names",
+      "file": "tests/test_crew_engine.py",
+      "line": 106
+    },
+    {
+      "type": "function",
+      "name": "git",
+      "file": "tests/test_github_publisher.py",
+      "line": 12
+    },
+    {
+      "type": "class",
+      "name": "RepositoryCase",
+      "file": "tests/test_github_publisher.py",
+      "line": 19
+    },
+    {
+      "type": "method",
+      "name": "RepositoryCase.setUp",
+      "file": "tests/test_github_publisher.py",
+      "line": 20
+    },
+    {
+      "type": "method",
+      "name": "RepositoryCase.tearDown",
+      "file": "tests/test_github_publisher.py",
+      "line": 49
+    },
+    {
+      "type": "class",
+      "name": "GitSafetyTests",
+      "file": "tests/test_github_publisher.py",
+      "line": 54
+    },
+    {
+      "type": "method",
+      "name": "GitSafetyTests.test_rejects_unsafe_and_blocked_paths",
+      "file": "tests/test_github_publisher.py",
+      "line": 55
+    },
+    {
+      "type": "method",
+      "name": "GitSafetyTests.test_only_github_remotes_can_be_matched",
+      "file": "tests/test_github_publisher.py",
+      "line": 60
+    },
+    {
+      "type": "method",
+      "name": "GitSafetyTests.test_unrelated_changes_are_preserved_and_rejected",
+      "file": "tests/test_github_publisher.py",
+      "line": 64
+    },
+    {
+      "type": "method",
+      "name": "GitSafetyTests.test_stages_exact_files_and_fingerprint_matches",
+      "file": "tests/test_github_publisher.py",
+      "line": 71
+    },
+    {
+      "type": "method",
+      "name": "GitSafetyTests.test_no_changes_returns_empty_staged_set",
+      "file": "tests/test_github_publisher.py",
+      "line": 80
+    },
+    {
+      "type": "method",
+      "name": "GitSafetyTests.test_feature_branch_is_deterministic_and_uses_base",
+      "file": "tests/test_github_publisher.py",
+      "line": 83
+    },
+    {
+      "type": "method",
+      "name": "GitSafetyTests.test_atomic_state_redacts_token",
+      "file": "tests/test_github_publisher.py",
+      "line": 91
+    },
+    {
+      "type": "class",
+      "name": "GithubPublishingTests",
+      "file": "tests/test_github_publisher.py",
+      "line": 97
+    },
+    {
+      "type": "method",
+      "name": "GithubPublishingTests.pipeline_result",
+      "file": "tests/test_github_publisher.py",
+      "line": 98
+    },
+    {
+      "type": "method",
+      "name": "GithubPublishingTests.test_create_or_get_pull_request_reuses_existing",
+      "file": "tests/test_github_publisher.py",
+      "line": 112
+    },
+    {
+      "type": "method",
+      "name": "GithubPublishingTests.test_create_pull_sanitizes_outbound_text",
+      "file": "tests/test_github_publisher.py",
+      "line": 121
+    },
+    {
+      "type": "method",
+      "name": "GithubPublishingTests.test_publish_creates_branch_commit_pr_and_state",
+      "file": "tests/test_github_publisher.py",
+      "line": 131
+    },
+    {
+      "type": "method",
+      "name": "GithubPublishingTests.test_publish_reuses_persisted_pr_when_no_diff",
+      "file": "tests/test_github_publisher.py",
+      "line": 150
+    },
+    {
+      "type": "method",
+      "name": "GithubPublishingTests.test_publish_recovers_existing_run_when_state_file_is_missing",
+      "file": "tests/test_github_publisher.py",
+      "line": 164
+    },
+    {
+      "type": "class",
+      "name": "ReviewDecisionTests",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 12
+    },
+    {
+      "type": "method",
+      "name": "ReviewDecisionTests.test_latest_meaningful_review_per_human_controls_status",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 13
+    },
+    {
+      "type": "method",
+      "name": "ReviewDecisionTests.test_old_commit_approval_requires_renewal",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 23
+    },
+    {
+      "type": "method",
+      "name": "ReviewDecisionTests.test_changes_requested_wins",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 27
+    },
+    {
+      "type": "method",
+      "name": "ReviewDecisionTests.test_collects_and_deduplicates_all_feedback_sources",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 34
+    },
+    {
+      "type": "class",
+      "name": "CorrectionContractTests",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 49
+    },
+    {
+      "type": "method",
+      "name": "CorrectionContractTests.setUp",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 50
+    },
+    {
+      "type": "method",
+      "name": "CorrectionContractTests.tearDown",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 62
+    },
+    {
+      "type": "method",
+      "name": "CorrectionContractTests.valid_result",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 65
+    },
+    {
+      "type": "method",
+      "name": "CorrectionContractTests.validate",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 77
+    },
+    {
+      "type": "method",
+      "name": "CorrectionContractTests.test_accepts_complete_contract_with_unavailable_tests",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 80
+    },
+    {
+      "type": "method",
+      "name": "CorrectionContractTests.test_rejects_failed_build_unresolved_feedback_and_repeated_patch",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 85
+    },
+    {
+      "type": "method",
+      "name": "CorrectionContractTests.test_missing_adapter_returns_specific_error",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 100
+    },
+    {
+      "type": "class",
+      "name": "CorrectionCycleTests",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 106
+    },
+    {
+      "type": "method",
+      "name": "CorrectionCycleTests.setUp",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 107
+    },
+    {
+      "type": "method",
+      "name": "CorrectionCycleTests.tearDown",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 121
+    },
+    {
+      "type": "method",
+      "name": "CorrectionCycleTests.test_successful_correction_commits_and_returns_to_waiting",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 125
+    },
+    {
+      "type": "function",
+      "name": "CorrectionCycleTests.test_successful_correction_commits_and_returns_to_waiting.correction",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 155
+    },
+    {
+      "type": "method",
+      "name": "CorrectionCycleTests.test_adapter_error_preserves_pending_feedback",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 186
+    },
+    {
+      "type": "method",
+      "name": "CorrectionCycleTests.test_pending_commit_resumes_after_push_failure",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 207
+    },
+    {
+      "type": "class",
+      "name": "GateModeTests",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 246
+    },
+    {
+      "type": "method",
+      "name": "GateModeTests.setUp",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 247
+    },
+    {
+      "type": "method",
+      "name": "GateModeTests.tearDown",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 262
+    },
+    {
+      "type": "method",
+      "name": "GateModeTests.snapshot",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 266
+    },
+    {
+      "type": "method",
+      "name": "GateModeTests.test_nonblocking_checks_once_and_returns_waiting",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 281
+    },
+    {
+      "type": "method",
+      "name": "GateModeTests.test_blocking_repeats_until_terminal",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 290
+    },
+    {
+      "type": "method",
+      "name": "GateModeTests.test_persisted_stop_flag_returns_stopped_without_polling",
+      "file": "tests/test_hitl_review_gate.py",
+      "line": 302
+    },
+    {
+      "type": "class",
+      "name": "OrchestrationTests",
+      "file": "tests/test_main.py",
+      "line": 8
+    },
+    {
+      "type": "method",
+      "name": "OrchestrationTests.test_phase4_error_is_returned_without_entering_review_gate",
+      "file": "tests/test_main.py",
+      "line": 9
+    },
+    {
+      "type": "method",
+      "name": "OrchestrationTests.test_phase5_receives_blocking_mode",
+      "file": "tests/test_main.py",
+      "line": 20
+    },
+    {
+      "type": "function",
+      "name": "run_phase4_and_phase5",
+      "file": "main.py",
+      "line": 11
+    }
+  ]
+}
