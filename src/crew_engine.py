@@ -23,6 +23,21 @@ from src.schemas import (
 from src.tools import run_build_plan
 
 
+SKIPPED_BUILD_RESULT = {
+    "status": "skipped",
+    "commands": [
+        {
+            "status": "skipped",
+            "command": "",
+            "return_code": None,
+            "stdout": "",
+            "stderr": "",
+            "timed_out": False,
+        }
+    ],
+}
+
+
 class ArchitectAgent(Protocol):
     def create_plan(self, agentic_input: AgenticInput) -> ArchitectPlan:
         """Create an implementation plan without editing files."""
@@ -115,7 +130,7 @@ class PlaceholderCoderAgent:
                 "The workflow contract and review loop can still be tested end to end.",
             ],
             build_attempted=False,
-            build_result={"status": "skipped", "reason": "No patch was generated."},
+            build_result=SKIPPED_BUILD_RESULT,
         )
 
 
@@ -178,6 +193,75 @@ def build_revision_request(
     )
 
 
+def _build_result(coder_result: CoderResult | None) -> dict[str, Any]:
+    if coder_result and coder_result.build_result:
+        return coder_result.build_result
+    return SKIPPED_BUILD_RESULT
+
+
+def _build_ready(build_result: dict[str, Any]) -> bool:
+    return str(build_result.get("status") or "").lower() in {"success", "skipped"}
+
+
+def _pr_title(agentic_input: AgenticInput) -> str:
+    summary = " ".join(agentic_input.issue_summary.split())
+    if not summary:
+        return "Update code from VisionPR agent workflow"
+    return summary[:72].rstrip(" .,")
+
+
+def _pr_summary(agentic_input: AgenticInput, changed_files: list[str]) -> str:
+    files = ", ".join(changed_files) if changed_files else "No files changed"
+    return (
+        f"VisionPR processed the reported issue: {agentic_input.issue_summary} "
+        f"Changed files: {files}."
+    )
+
+
+def _ready_for_pr(
+    status: str,
+    reviewer_result: ReviewerResult,
+    coder_result: CoderResult,
+    build_result: dict[str, Any],
+) -> bool:
+    return (
+        status == "APPROVED_FOR_PR"
+        and reviewer_result.approved
+        and bool(coder_result.modified_files)
+        and _build_ready(build_result)
+    )
+
+
+def _workflow_result(
+    *,
+    status: str,
+    agentic_input: AgenticInput,
+    repo_path: str | Path,
+    plan: ArchitectPlan,
+    coder_result: CoderResult,
+    reviewer_result: ReviewerResult,
+    review_attempts: int,
+    milestone: str,
+) -> dict[str, Any]:
+    build_result = _build_result(coder_result)
+    ready_for_pr = _ready_for_pr(status, reviewer_result, coder_result, build_result)
+    return AgentWorkflowResult(
+        status=status,
+        run_id=agentic_input.run_id,
+        ready_for_pr=ready_for_pr,
+        repo_path=str(Path(repo_path).resolve()),
+        build_result=build_result,
+        pr_title=_pr_title(agentic_input),
+        pr_summary=_pr_summary(agentic_input, coder_result.modified_files),
+        architect_plan=plan.to_dict(),
+        coder_result=coder_result.to_dict(),
+        reviewer_result=reviewer_result.to_dict(),
+        changed_files=coder_result.modified_files,
+        review_attempts=review_attempts,
+        commit_reminder=COMMIT_REMINDER_TEMPLATE.format(milestone=milestone),
+    ).to_dict()
+
+
 def run_agentic_workflow(
     agentic_input: AgenticInput | dict[str, Any],
     *,
@@ -216,33 +300,29 @@ def run_agentic_workflow(
 
         reviewer_result = reviewer_agent.review_patch(agentic_input, plan, coder_result)
         if reviewer_result.approved:
-            return AgentWorkflowResult(
+            return _workflow_result(
                 status="APPROVED_FOR_PR",
-                run_id=agentic_input.run_id,
-                architect_plan=plan.to_dict(),
-                coder_result=coder_result.to_dict(),
-                reviewer_result=reviewer_result.to_dict(),
-                changed_files=coder_result.modified_files,
+                agentic_input=agentic_input,
+                repo_path=repo_path,
+                plan=plan,
+                coder_result=coder_result,
+                reviewer_result=reviewer_result,
                 review_attempts=attempt,
-                commit_reminder=COMMIT_REMINDER_TEMPLATE.format(
-                    milestone="agentic patch approved for PR publishing"
-                ),
-            ).to_dict()
+                milestone="agentic patch approved for PR publishing",
+            )
 
         revision_request = build_revision_request(plan, reviewer_result, coder_result, attempt + 1)
 
-    return AgentWorkflowResult(
+    return _workflow_result(
         status="REVIEW_FAILED",
-        run_id=agentic_input.run_id,
-        architect_plan=plan.to_dict(),
-        coder_result=(coder_result or CoderResult([], "Coder did not run.")).to_dict(),
-        reviewer_result=(reviewer_result or ReviewerResult(False, "NEEDS_REVISION")).to_dict(),
-        changed_files=(coder_result.modified_files if coder_result else []),
+        agentic_input=agentic_input,
+        repo_path=repo_path,
+        plan=plan,
+        coder_result=coder_result or CoderResult([], "Coder did not run.", build_result=SKIPPED_BUILD_RESULT),
+        reviewer_result=reviewer_result or ReviewerResult(False, "NEEDS_REVISION"),
         review_attempts=max_attempts,
-        commit_reminder=COMMIT_REMINDER_TEMPLATE.format(
-            milestone="agent workflow contracts and retry behavior"
-        ),
-    ).to_dict()
+        milestone="agent workflow contracts and retry behavior",
+    )
 
 
 def run_agentic_workflow_from_file(path: str | Path, *, repo_path: str | Path = ".") -> dict[str, Any]:

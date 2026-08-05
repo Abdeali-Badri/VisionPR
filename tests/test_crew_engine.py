@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from src.crew_engine import run_agentic_workflow
 from src.schemas import ArchitectPlan, CoderResult, ReviewerResult
@@ -85,8 +86,13 @@ class CrewEngineTests(unittest.TestCase):
         )
 
         self.assertEqual("APPROVED_FOR_PR", result["status"])
+        self.assertTrue(result["ready_for_pr"])
         self.assertEqual(["src/pages/Profile.jsx"], result["changed_files"])
         self.assertEqual(1, result["review_attempts"])
+        self.assertEqual(str(Path(".").resolve()), result["repo_path"])
+        self.assertEqual("skipped", result["build_result"]["status"])
+        self.assertIn("Save button", result["pr_title"])
+        self.assertIn("src/pages/Profile.jsx", result["pr_summary"])
         self.assertIn("Commit this progress", result["commit_reminder"])
 
     def test_default_reviewer_rejects_empty_patch_until_retry_limit(self):
@@ -99,6 +105,7 @@ class CrewEngineTests(unittest.TestCase):
         )
 
         self.assertEqual("REVIEW_FAILED", result["status"])
+        self.assertFalse(result["ready_for_pr"])
         self.assertEqual(2, result["review_attempts"])
         self.assertEqual(2, coder.calls)
         self.assertIn("Coder did not modify any files.", result["reviewer_result"]["issues_found"])
@@ -107,6 +114,10 @@ class CrewEngineTests(unittest.TestCase):
         result = run_agentic_workflow(sample_agentic_input(), run_builds=False)
 
         self.assertEqual(["src/pages/Profile.jsx"], result["architect_plan"]["target_files"])
+        self.assertIn("ready_for_pr", result)
+        self.assertIn("build_result", result)
+        self.assertIn("pr_title", result)
+        self.assertIn("pr_summary", result)
         self.assertNotIn("phase1", str(result).lower())
         self.assertNotIn("phase2", str(result).lower())
 
