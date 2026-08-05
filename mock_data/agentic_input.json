@@ -17,21 +17,16 @@
     ]
   },
   "repository_context": {
-    "repo_tree": "src/\n  pages/Profile.jsx\n  api/profile.js\n  components/Button.jsx",
+    "repo_tree": "profile.py\ntest_profile.py\nREADME.md",
     "relevant_files": [
       {
-        "path": "src/pages/Profile.jsx",
-        "summary": "Profile form component containing local state and the Save button handler.",
-        "symbols": ["ProfilePage", "handleSave"]
-      },
-      {
-        "path": "src/api/profile.js",
-        "summary": "Client helper for profile read and update API calls.",
-        "symbols": ["fetchProfile", "updateProfile"]
+        "path": "profile.py",
+        "summary": "Tiny profile update helper used by the deterministic Phase 3 demo.",
+        "symbols": ["save_profile"]
       }
     ]
   },
-  "build_commands": ["npm test", "npm run build"],
+  "build_commands": ["python -m unittest discover"],
   "constraints": [
     "Make the minimum required change.",
     "Preserve existing component styling.",

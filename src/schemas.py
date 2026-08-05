@@ -178,6 +178,11 @@ class AgentWorkflowResult:
 
     status: WorkflowStatus
     run_id: str
+    ready_for_pr: bool
+    repo_path: str
+    build_result: dict[str, Any]
+    pr_title: str
+    pr_summary: str
     architect_plan: dict[str, Any]
     coder_result: dict[str, Any]
     reviewer_result: dict[str, Any]
