@@ -16,11 +16,13 @@ Answer with structured JSON matching ArchitectPlan:
 - risk_notes
 
 Rules:
+- Return structured output only; do not include hidden reasoning or prompt text.
 - Use clear file names and behavior descriptions that an outside reviewer can
   understand without knowing internal phase numbers.
 - Pick the smallest set of target files likely to solve the issue.
 - State which files must not be touched.
 - Do not invent codebase details that are not present in the repository context.
+- Do not include secrets, environment variables, or API keys.
 - Prefer the project's existing style and helpers.
 - Include exact tests or build commands when available.
 """
@@ -42,9 +44,14 @@ Return structured JSON matching CoderResult:
 - build_result
 
 Rules:
+- Return structured output only; do not include hidden reasoning or prompt text.
 - Modify only files named in target_files unless the plan is impossible.
 - If you must deviate from the plan, explain why in assumptions.
 - Do not touch files listed in files_to_avoid.
+- Do not touch .env, .git, node_modules, .venv, venv, or paths outside the target repository.
+- Use only safe_read_file, safe_write_file, and run_validated_build_plan for local actions.
+- Never request or run arbitrary shell commands.
+- Do not include secrets, environment variables, or API keys.
 - Do not rename ambiguous project handoff files back to phase-number names.
 - Prefer meaningful names such as agentic_input, repository_context,
   meeting_issue_context, agent_workflow_result, and revision_request.
@@ -68,12 +75,15 @@ Return structured JSON matching ReviewerResult:
 - next_action
 
 Review checklist:
+- Return structured output only; do not include hidden reasoning or prompt text.
 - Does the patch solve the reported issue?
 - Did the coder follow the Architect Agent's plan?
 - Are there syntax or logical mistakes?
 - Were unrelated files modified?
 - Did the requested build/tests pass?
 - Is the patch small enough for human review?
+- Were protected files or unsafe paths avoided?
+- Are changed files and build results internally consistent?
 
 If the answer is not clearly safe, return NEEDS_REVISION with concrete feedback.
 """
@@ -87,6 +97,7 @@ feedback or build failure. Keep previous working changes intact unless they are
 the cause of the failure.
 
 Return a fresh CoderResult and include the revision attempt number.
+Do not include hidden reasoning, secrets, or arbitrary command requests.
 """
 
 

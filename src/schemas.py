@@ -183,6 +183,13 @@ class AgentWorkflowResult:
     build_result: dict[str, Any]
     pr_title: str
     pr_summary: str
+    execution_mode: str
+    llm_used: bool
+    crewai_installed: bool
+    provider: str | None
+    model: str | None
+    runtime_reason: str
+    demo_run: bool
     architect_plan: dict[str, Any]
     coder_result: dict[str, Any]
     reviewer_result: dict[str, Any]

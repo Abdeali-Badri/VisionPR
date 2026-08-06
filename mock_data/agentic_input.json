@@ -1,5 +1,6 @@
 {
   "run_id": "mock-agentic-run-001",
+  "demo_run": true,
   "issue_summary": "The user reports that clicking Save on the profile page does not persist edited profile details.",
   "meeting_issue_context": {
     "transcript_segments": [

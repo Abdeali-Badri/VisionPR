@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+# DEMO_PATCH_PENDING
+
 
 def save_profile(current_profile: dict[str, str], updates: dict[str, str]) -> dict[str, str]:
     """Return a profile with allowed updates applied."""

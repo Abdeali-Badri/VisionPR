@@ -37,6 +37,19 @@ Success criteria:
 - The plan preserves existing codebase boundaries.
 - The plan avoids unrelated refactoring.
 
+Online implementation: `CrewAIArchitectAgent`.
+
+Offline implementation: `OfflineArchitectAgent`, a deterministic adapter that
+uses only structured input and does not perform LLM reasoning.
+
+Construction: `AgentFactory` injects the selected shared LLM into the CrewAI
+adapter. The Architect Agent does not create or select its own model.
+
+Allowed tools: structured issue and repository context only.
+
+Forbidden actions: editing files, reading `.env`, inventing files, exposing
+secrets, or requesting arbitrary commands.
+
 ## Coder Agent
 
 The Coder Agent receives the Architect Agent's plan and repository tools from
@@ -57,6 +70,22 @@ Rules:
 - Do not make formatting-only or cleanup changes unrelated to the issue.
 - If a deviation is necessary, document it in the result.
 
+Online implementation: `CrewAICoderAgent`.
+
+Offline implementation: `OfflineCoderAgent`, a deterministic adapter that only
+supports the bundled mock repository demonstration scenario.
+
+Construction: `AgentFactory` injects the selected shared LLM into the CrewAI
+adapter. The Coder Agent receives safe tools separately and does not create or
+select its own model.
+
+Allowed tools: `safe_read_file`, `safe_write_file`, and
+`run_validated_build_plan`.
+
+Forbidden actions: arbitrary shell execution, choosing the repository root,
+modifying protected paths, touching files outside the Architect plan, or
+claiming arbitrary offline coding ability.
+
 ## Reviewer Agent
 
 The Reviewer Agent checks the Coder Agent's patch and build result.
@@ -75,6 +104,22 @@ Approval criteria:
 - The implementation follows the plan.
 - The build/test result is successful or explicitly justified.
 - The change is small enough for human PR review.
+
+Online implementation: `CrewAIReviewerAgent`.
+
+Offline implementation: `OfflineReviewerAgent`, a deterministic adapter that
+checks changed files, build status, protected paths, and the bundled demo
+transformation.
+
+Construction: `AgentFactory` injects the selected shared LLM into the CrewAI
+adapter. The Reviewer Agent does not create or select its own model.
+
+Allowed tools: safe read-only inspection of changed files and structured build
+results.
+
+Forbidden actions: modifying files, running arbitrary commands, approving empty
+patches, approving failed builds, or letting model approval override
+deterministic safety checks.
 
 ## Retry Policy
 

@@ -28,6 +28,128 @@ VisionPR operates through a sequential, 5-phase pipeline:
 * **Computer Vision / Audio:** OpenCV, Faster-Whisper
 * **Version Control:** PyGithub, Git CLI
 
+## Phase 3 Execution Modes
+
+VisionPR Phase 3 uses CrewAI for its Architect, Coder, and Reviewer agents. An
+external LLM connection is optional for installation, testing, CI, and controlled
+demonstration.
+
+```text
+Online mode  -> CrewAI agents backed by a supported LLM provider
+Offline mode -> deterministic demo agents using the same Phase 3 contracts
+```
+
+`AgentFactory` selects the agent implementation family. In offline mode it
+returns deterministic heuristic agents. In CrewAI mode it asks `LLMFactory` for a
+CrewAI-compatible Gemini or Groq LLM and injects the same LLM into the
+Architect, Coder, and Reviewer adapters.
+
+Offline mode is not genuine AI reasoning. It demonstrates input loading, shared
+agent contracts, safe repository reads, controlled writes, build execution,
+deterministic planning, rule-based review, retry limits, and the Phase 4 handoff
+without external API calls.
+
+Offline mode cannot demonstrate natural-language code generation, arbitrary
+repository modification, visual issue interpretation, or a real model
+conversation.
+
+### Environment Configuration
+
+Copy `.env.example` if you need local configuration. Do not commit `.env`.
+
+```dotenv
+VISIONPR_MODE=auto
+VISIONPR_LLM_PROVIDER=
+VISIONPR_LLM_MODEL=
+GEMINI_API_KEY=
+GROQ_API_KEY=
+RUN_LLM_TESTS=0
+```
+
+Supported `VISIONPR_MODE` values:
+
+- `auto`: use CrewAI online mode when a supported API key exists; otherwise use
+  offline demo mode.
+- `offline`: always use deterministic offline demo mode.
+- `crewai`: require a supported API key and use CrewAI online mode.
+
+Supported online providers are only `gemini` and `groq`. Set
+`VISIONPR_LLM_PROVIDER` to choose one explicitly, or leave it empty for automatic
+detection from configured keys and model prefixes. When both Gemini and Groq
+keys are configured, Gemini is selected first unless the provider or model
+clearly selects Groq. Groq requires a team-tested `VISIONPR_LLM_MODEL`.
+
+### Running Tests
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Normal tests do not require API keys, network access, or real LLM calls.
+
+### Running The Demo
+
+Deterministic local demo:
+
+```bash
+python -m scripts.run_phase3_demo
+```
+
+The demo defaults to offline mode so it never needs API keys. Explicit offline
+mode is also supported:
+
+```bash
+VISIONPR_MODE=offline python -m scripts.run_phase3_demo
+```
+
+PowerShell:
+
+```powershell
+$env:VISIONPR_MODE="offline"
+python -m scripts.run_phase3_demo
+```
+
+Forced CrewAI mode:
+
+```bash
+VISIONPR_MODE=crewai python -m scripts.run_phase3_demo
+```
+
+PowerShell:
+
+```powershell
+$env:VISIONPR_MODE="crewai"
+python -m scripts.run_phase3_demo
+```
+
+Forced CrewAI mode requires a supported API key. Without one, the demo prints a
+clear configuration error.
+
+### Optional Real LLM Tests
+
+Real model tests are disabled by default:
+
+```bash
+RUN_LLM_TESTS=1 python -m unittest discover -s tests -v
+```
+
+PowerShell:
+
+```powershell
+$env:RUN_LLM_TESTS="1"
+python -m unittest discover -s tests -v
+```
+
+### Security Boundaries
+
+Phase 3 build commands are allow-listed. The Coder receives only safe repository
+tools: `safe_read_file`, `safe_write_file`, and `run_validated_build_plan`.
+
+The workflow never permits arbitrary shell execution, never sends `.env`
+contents to an LLM, never trusts LLM-produced paths without validation, never
+lets the model choose the repository root, and never lets model approval
+override deterministic safety checks.
+
 ## 📂 Project Structure
 
 ```text

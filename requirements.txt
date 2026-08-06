@@ -1,7 +1,10 @@
-crewai
-crewai-tools
+crewai==1.15.11
+crewai-tools==1.15.11
+google-genai==2.16.0
+litellm==1.95.0
 groq
 pygithub
 opencv-python
 faster-whisper
-python-dotenv
+python-dotenv==1.2.2
+pydantic==2.12.5
