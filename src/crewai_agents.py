@@ -34,8 +34,17 @@ except ImportError:  # pragma: no cover - exercised indirectly when CrewAI is ab
                 setattr(self, key, value)
 
 from src.prompts import ARCHITECT_AGENT_PROMPT, CODER_AGENT_PROMPT, REDO_TASK_PROMPT, REVIEWER_AGENT_PROMPT
+from src.context_budget import REVIEW_DIFF_CHAR_BUDGET, TOOL_READ_CHAR_BUDGET, compact_agentic_input, truncate_text
 from src.schemas import AgenticInput, ArchitectPlan, CoderResult, ReviewerResult, RevisionRequest
-from src.tools import read_file, run_build_plan, validate_build_command, write_file
+from src.tools import (
+    cleanup_generated_build_artifacts,
+    list_worktree_changes,
+    read_file,
+    read_git_diff,
+    run_build_plan,
+    validate_build_command,
+    write_file,
+)
 
 
 class ArchitectPlanModel(BaseModel):
@@ -70,11 +79,20 @@ class ReviewerResultModel(BaseModel):
 
 class SafeReadFileTool(BaseTool):
     name: str = "safe_read_file"
-    description: str = "Read a UTF-8 file from the trusted target repository using safe path validation."
+    description: str = (
+        "Read lines from a UTF-8 file in the trusted target repository using safe path validation. "
+        "Use start_line and end_line to inspect large files in bounded chunks."
+    )
     repo_path: str
 
-    def _run(self, relative_path: str) -> str:
-        return read_file(self.repo_path, relative_path)
+    def _run(self, relative_path: str, start_line: int = 1, end_line: int = 400) -> str:
+        content = read_file(self.repo_path, relative_path)
+        lines = content.splitlines(keepends=True)
+        start = max(1, int(start_line))
+        end = min(len(lines), max(start, int(end_line)))
+        selected = "".join(lines[start - 1 : end])
+        body = truncate_text(selected, TOOL_READ_CHAR_BUDGET)
+        return f"[lines {start}-{end} of {len(lines)}]\n{body}"
 
 
 class SafeWriteFileTool(BaseTool):
@@ -86,6 +104,16 @@ class SafeWriteFileTool(BaseTool):
         return write_file(self.repo_path, relative_path, content)
 
 
+class SafeGitDiffTool(BaseTool):
+    name: str = "safe_git_diff"
+    description: str = "Read the current Git patch in the trusted target repository without modifying it."
+    repo_path: str
+
+    def _run(self, include_untracked: bool = True) -> str:
+        del include_untracked
+        return read_git_diff(self.repo_path)
+
+
 class ValidatedBuildPlanTool(BaseTool):
     name: str = "run_validated_build_plan"
     description: str = "Run allow-listed build/test commands supplied by the workflow against the trusted target repository."
@@ -94,7 +122,10 @@ class ValidatedBuildPlanTool(BaseTool):
     def _run(self, commands: list[str]) -> dict[str, Any]:
         for command in commands:
             validate_build_command(command)
-        return run_build_plan(self.repo_path, commands)
+        changes_before_build = list_worktree_changes(self.repo_path)
+        result = run_build_plan(self.repo_path, commands)
+        cleanup_generated_build_artifacts(self.repo_path, changes_before_build)
+        return result
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -126,7 +157,7 @@ class _BaseCrewAIAdapter:
             tools=tools or [],
             allow_delegation=False,
             verbose=False,
-            max_iter=3,
+            max_iter=8,
             max_retry_limit=1,
             allow_code_execution=False,
         )
@@ -159,14 +190,16 @@ class CrewAIArchitectAgent(_BaseCrewAIAdapter):
     goal = "Produce a minimal, safe, repository-grounded implementation plan from supplied issue and repository context."
 
     def create_plan(self, agentic_input: AgenticInput) -> ArchitectPlan:
+        compact_input = compact_agentic_input(agentic_input, include_file_contents=True)
         model = self._run_task(
             description=(
                 ARCHITECT_AGENT_PROMPT
                 + "\nAgentic input JSON:\n"
-                + json.dumps(agentic_input.to_dict(), indent=2)
+                + json.dumps(compact_input, indent=2)
             ),
             expected_output="Structured ArchitectPlan JSON only.",
             output_model=ArchitectPlanModel,
+            tools=[SafeReadFileTool(repo_path=str(self.repo_path))],
         )
         return ArchitectPlan.from_dict(model.model_dump())
 
@@ -180,6 +213,7 @@ class CrewAICoderAgent(_BaseCrewAIAdapter):
         return [
             SafeReadFileTool(repo_path=repo),
             SafeWriteFileTool(repo_path=repo),
+            SafeGitDiffTool(repo_path=repo),
             ValidatedBuildPlanTool(repo_path=repo),
         ]
 
@@ -189,6 +223,7 @@ class CrewAICoderAgent(_BaseCrewAIAdapter):
         plan: ArchitectPlan,
         revision_request: RevisionRequest | None = None,
     ) -> CoderResult:
+        compact_input = compact_agentic_input(agentic_input, include_file_contents=False)
         revision_text = ""
         if revision_request is not None:
             revision_text = "\nRevision request:\n" + json.dumps(revision_request.to_dict(), indent=2)
@@ -198,7 +233,7 @@ class CrewAICoderAgent(_BaseCrewAIAdapter):
                 + "\n"
                 + REDO_TASK_PROMPT
                 + "\nAgentic input JSON:\n"
-                + json.dumps(agentic_input.to_dict(), indent=2)
+                + json.dumps(compact_input, indent=2)
                 + "\nArchitect plan JSON:\n"
                 + json.dumps(plan.to_dict(), indent=2)
                 + revision_text
@@ -215,7 +250,10 @@ class CrewAIReviewerAgent(_BaseCrewAIAdapter):
     goal = "Review the patch result and return structured approval or revision feedback."
 
     def _tools(self) -> list[BaseTool]:
-        return [SafeReadFileTool(repo_path=str(self.repo_path))]
+        return [
+            SafeReadFileTool(repo_path=str(self.repo_path)),
+            SafeGitDiffTool(repo_path=str(self.repo_path)),
+        ]
 
     def review_patch(
         self,
@@ -223,15 +261,19 @@ class CrewAIReviewerAgent(_BaseCrewAIAdapter):
         plan: ArchitectPlan,
         coder_result: CoderResult,
     ) -> ReviewerResult:
+        compact_input = compact_agentic_input(agentic_input, include_file_contents=False)
+        repository_diff = truncate_text(read_git_diff(self.repo_path), REVIEW_DIFF_CHAR_BUDGET, keep_tail=True)
         model = self._run_task(
             description=(
                 REVIEWER_AGENT_PROMPT
                 + "\nAgentic input JSON:\n"
-                + json.dumps(agentic_input.to_dict(), indent=2)
+                + json.dumps(compact_input, indent=2)
                 + "\nArchitect plan JSON:\n"
                 + json.dumps(plan.to_dict(), indent=2)
                 + "\nCoder result JSON:\n"
                 + json.dumps(coder_result.to_dict(), indent=2)
+                + "\nActual repository diff:\n"
+                + repository_diff
             ),
             expected_output="Structured ReviewerResult JSON only.",
             output_model=ReviewerResultModel,

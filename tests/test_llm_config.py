@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from src.llm.config import GEMINI_DEFAULT_MODEL, LLMConfig, load_llm_config, normalize_model
+from src.llm.config import GEMINI_DEFAULT_MODEL, GROQ_DEFAULT_MODEL, LLMConfig, load_llm_config, normalize_model
 from src.llm.providers import LLMProvider, parse_llm_provider
 from src.runtime_config import RuntimeConfigError
 
@@ -54,10 +54,9 @@ class LLMConfigTests(unittest.TestCase):
             self.assertEqual("gemini/custom-model", load_llm_config().model)
         self.assertEqual("gemini/custom", normalize_model(LLMProvider.GEMINI, "custom"))
 
-    def test_groq_requires_model(self):
+    def test_groq_uses_tested_default_model(self):
         with self.env(GROQ_API_KEY="secret"):
-            with self.assertRaisesRegex(RuntimeConfigError, "VISIONPR_LLM_MODEL"):
-                load_llm_config()
+            self.assertEqual(GROQ_DEFAULT_MODEL, load_llm_config().model)
 
     def test_missing_keys_and_wrong_keys_are_rejected(self):
         with self.env():

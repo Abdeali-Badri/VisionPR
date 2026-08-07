@@ -22,14 +22,38 @@ BLOCKED_PATH_PARTS = {
     "node_modules",
     "__pycache__",
 }
+GENERATED_BUILD_PATH_PARTS = {
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+}
 ALLOWED_BUILD_COMMAND_PREFIXES = (
     ("pytest",),
     ("python", "-m", "pytest"),
     ("python", "-m", "unittest"),
+    ("python", "-m", "compileall"),
+    ("python", "-m", "py_compile"),
     ("npm", "test"),
+    ("npm", "run", "test"),
     ("npm", "run", "build"),
+    ("pnpm", "test"),
+    ("pnpm", "run", "test"),
+    ("pnpm", "run", "build"),
+    ("yarn", "test"),
+    ("yarn", "build"),
+    ("go", "test"),
+    ("cargo", "test"),
+    ("dotnet", "test"),
+    ("mvn", "test"),
+    ("gradle", "test"),
+    ("gradlew.bat", "test"),
+    ("./gradlew", "test"),
 )
 SHELL_METACHARACTERS = ("&&", "||", ";", "|", ">", "<", "`", "$(", "\n", "\r")
+DESTRUCTIVE_REWRITE_MIN_LINES = 40
+DESTRUCTIVE_REWRITE_MIN_REMOVED_LINES = 30
+DESTRUCTIVE_REWRITE_MAX_REMAINING_RATIO = 0.25
 
 
 class ToolSafetyError(ValueError):
@@ -87,6 +111,22 @@ def write_file(repo_path: str | Path, relative_path: str, content: str) -> dict[
     parent = target.parent.resolve()
     if parent != root and root not in parent.parents:
         raise ToolSafetyError(f"Parent path escapes repository root: {relative_path}")
+    if target.is_file():
+        existing = target.read_text(encoding="utf-8")
+        existing_lines = existing.splitlines()
+        replacement_lines = content.splitlines()
+        removed_lines = len(existing_lines) - len(replacement_lines)
+        remaining_ratio = len(replacement_lines) / max(len(existing_lines), 1)
+        if (
+            len(existing_lines) >= DESTRUCTIVE_REWRITE_MIN_LINES
+            and removed_lines >= DESTRUCTIVE_REWRITE_MIN_REMOVED_LINES
+            and remaining_ratio <= DESTRUCTIVE_REWRITE_MAX_REMAINING_RATIO
+        ):
+            raise ToolSafetyError(
+                "VisionPR blocked a destructive partial overwrite of "
+                f"{relative_path}: the replacement keeps only {len(replacement_lines)} of "
+                f"{len(existing_lines)} lines. Preserve the complete file and apply a focused edit."
+            )
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
     return {
@@ -94,6 +134,77 @@ def write_file(repo_path: str | Path, relative_path: str, content: str) -> dict[
         "absolute_path": str(target),
         "bytes_written": len(content.encode("utf-8")),
     }
+
+
+def _git_output(repo_path: str | Path, args: list[str]) -> bytes:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=_repo_root(repo_path),
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise ToolSafetyError("Git is required to verify repository changes.") from exc
+    if completed.returncode != 0:
+        message = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise ToolSafetyError(f"Git could not inspect the target repository: {message}")
+    return completed.stdout
+
+
+def list_worktree_changes(repo_path: str | Path) -> list[str]:
+    """Return tracked and untracked repository-relative paths changed from HEAD."""
+    tracked = _git_output(repo_path, ["diff", "--name-only", "--relative", "-z", "HEAD"])
+    untracked = _git_output(repo_path, ["ls-files", "--others", "--exclude-standard", "-z"])
+    paths = {
+        str(PurePosixPath(path))
+        for path in (tracked + untracked).decode("utf-8", errors="replace").split("\0")
+        if path
+    }
+    return sorted(paths)
+
+
+def cleanup_generated_build_artifacts(
+    repo_path: str | Path,
+    changes_before_build: list[str],
+) -> list[str]:
+    """Remove only new, untracked cache files created by a validation command."""
+    root = _repo_root(repo_path)
+    before = set(changes_before_build)
+    untracked = _git_output(root, ["ls-files", "--others", "--exclude-standard", "-z"])
+    removed: list[str] = []
+    for relative_path in untracked.decode("utf-8", errors="replace").split("\0"):
+        if not relative_path or relative_path in before:
+            continue
+        parts = {part.lower() for part in _path_parts(relative_path)}
+        if not parts.intersection(GENERATED_BUILD_PATH_PARTS):
+            continue
+        target = (root / Path(*_path_parts(relative_path))).resolve()
+        if target == root or root not in target.parents:
+            raise ToolSafetyError(f"Generated artifact escapes repository root: {relative_path}")
+        if target.is_file():
+            target.unlink()
+            removed.append(str(PurePosixPath(relative_path)))
+
+        parent = target.parent
+        while parent != root and root in parent.parents:
+            if parent.name.lower() not in GENERATED_BUILD_PATH_PARTS or any(parent.iterdir()):
+                break
+            parent.rmdir()
+            parent = parent.parent
+    return sorted(removed)
+
+
+def read_git_diff(repo_path: str | Path, max_chars: int = 30_000) -> str:
+    """Return a bounded, read-only patch for agent and reviewer grounding."""
+    patch = _git_output(repo_path, ["diff", "--no-ext-diff", "--relative", "HEAD", "--"])
+    text = patch.decode("utf-8", errors="replace")
+    untracked = list_worktree_changes(repo_path)
+    if untracked and not text:
+        text = "Untracked changed files: " + ", ".join(untracked)
+    if len(text) > max_chars:
+        return text[:max_chars] + "\n... diff truncated by VisionPR ...\n"
+    return text
 
 
 def validate_build_command(command: str) -> None:

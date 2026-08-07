@@ -77,7 +77,24 @@ Supported online providers are only `gemini` and `groq`. Set
 `VISIONPR_LLM_PROVIDER` to choose one explicitly, or leave it empty for automatic
 detection from configured keys and model prefixes. When both Gemini and Groq
 keys are configured, Gemini is selected first unless the provider or model
-clearly selects Groq. Groq requires a team-tested `VISIONPR_LLM_MODEL`.
+clearly selects Groq. When no model is specified, Groq uses
+`llama-3.3-70b-versatile`.
+
+### End-to-End Run
+
+Run from a local meeting recording or YouTube URL:
+
+```bash
+python main.py --repository owner/project --media meeting.mp4 --build-command "python -m pytest"
+python main.py --repository owner/project --media "https://youtu.be/video-id" --build-command "npm test"
+```
+
+VisionPR extracts timestamped tasks, creates an isolated repository run and PR
+for each task, enters the GitHub review gate, and writes JSON and Markdown
+reports under `data/reports/`. Use `--local-only` to test edits without pushing,
+or `--intelligence data/output_json/video_intelligence.json` to reuse an
+existing extraction. A read-only repository requires a GitHub credential that
+can create or reuse a fork.
 
 ### Running Tests
 
@@ -86,6 +103,35 @@ python -m unittest discover -s tests -v
 ```
 
 Normal tests do not require API keys, network access, or real LLM calls.
+
+### Web Application
+
+VisionPR includes a React workspace and a FastAPI control plane for uploading a
+meeting, attaching a public GitHub repository, reviewing generated diffs, asking
+the agent for another revision on the same PR, and explicitly accepting and
+merging the result.
+
+```powershell
+# API
+python -m uvicorn backend.app:app --reload --port 8000
+
+# UI (in a second terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. Development demo mode is enabled by default. For
+real user sessions, create a GitHub OAuth app with callback URL
+`http://127.0.0.1:8000/api/auth/github/callback`, configure
+`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and a strong
+`VISIONPR_SESSION_SECRET`, then set `VISIONPR_DEMO_MODE=0`.
+
+The OAuth token is encrypted before it is stored. VisionPR requests public
+repository access so it can create or reuse a user fork when direct push access
+is unavailable. Acceptance and merge are intentionally separate actions; a
+requested revision is validated and pushed to the existing PR branch before the
+human is asked to review it again.
 
 ### Running The Demo
 

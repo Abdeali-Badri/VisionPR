@@ -23,17 +23,55 @@ class LLMFactoryTests(unittest.TestCase):
     @patch.dict(os.environ, {"GROQ_API_KEY": "secret"}, clear=True)
     @patch("src.llm.factory._load_crewai_llm")
     def test_groq_llm_construction(self, loader):
-        llm = Mock()
-        loader.return_value = llm
+        class FakeLLM:
+            def __init__(self, **options):
+                self.options = options
+
+            def call(self, messages, *args, **kwargs):
+                return messages
+
+        loader.return_value = FakeLLM
         config = LLMConfig(LLMProvider.GROQ, "groq/team-model")
-        create_llm(config)
-        llm.assert_called_once_with(model="groq/team-model", temperature=0.1)
+        result = create_llm(config)
+        self.assertEqual(
+            {
+                "model": "groq/team-model",
+                "temperature": 0.1,
+                "drop_params": True,
+                "additional_drop_params": ["messages[*].cache_breakpoint"],
+            },
+            result.options,
+        )
+        messages = [{"role": "system", "content": "x", "cache_breakpoint": True}]
+        self.assertNotIn("cache_breakpoint", result.call(messages)[0])
 
     def test_missing_key_errors_do_not_include_secret_values(self):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaisesRegex(RuntimeConfigError, "GEMINI_API_KEY") as caught:
                 create_llm(LLMConfig(LLMProvider.GEMINI, "gemini/model"))
         self.assertNotIn("secret", str(caught.exception).lower())
+
+    @patch.dict(os.environ, {"GROQ_API_KEY": "secret"}, clear=True)
+    @patch("src.llm.factory.time.sleep")
+    @patch("src.llm.factory._load_crewai_llm")
+    def test_groq_rate_limit_retries_the_llm_call(self, loader, sleep):
+        class RateLimitError(RuntimeError):
+            pass
+
+        class FakeLLM:
+            def __init__(self, **options):
+                self.calls = 0
+
+            def call(self, messages, *args, **kwargs):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RateLimitError("Rate limit reached. Please try again in 1.5s")
+                return "ok"
+
+        loader.return_value = FakeLLM
+        result = create_llm(LLMConfig(LLMProvider.GROQ, "groq/team-model"))
+        self.assertEqual("ok", result.call([{"role": "user", "content": "x"}]))
+        sleep.assert_called_once_with(2.0)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,10 @@
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
 from src.crew_engine import run_agentic_workflow
+from src.runtime_config import AgentEngine, RuntimeConfig
 from src.schemas import ArchitectPlan, CoderResult, ReviewerResult
 
 
@@ -29,6 +32,16 @@ def sample_agentic_input():
         "constraints": ["Do not modify routing files."],
         "max_review_attempts": 2,
     }
+
+
+def heuristic_runtime():
+    return RuntimeConfig(
+        engine=AgentEngine.HEURISTIC,
+        llm=None,
+        reason="Unit test forces deterministic agents.",
+        requested_mode="heuristic",
+        crewai_installed=True,
+    )
 
 
 class StubArchitect:
@@ -82,6 +95,7 @@ class CrewEngineTests(unittest.TestCase):
             architect=StubArchitect(),
             coder=SuccessfulCoder(),
             reviewer=ApprovingReviewer(),
+            runtime=heuristic_runtime(),
             run_builds=False,
         )
 
@@ -101,6 +115,7 @@ class CrewEngineTests(unittest.TestCase):
             sample_agentic_input(),
             architect=StubArchitect(),
             coder=coder,
+            runtime=heuristic_runtime(),
             run_builds=False,
         )
 
@@ -111,7 +126,11 @@ class CrewEngineTests(unittest.TestCase):
         self.assertIn("Coder did not modify any files.", result["reviewer_result"]["issues_found"])
 
     def test_default_architect_uses_repository_context_file_names(self):
-        result = run_agentic_workflow(sample_agentic_input(), run_builds=False)
+        result = run_agentic_workflow(
+            sample_agentic_input(),
+            runtime=heuristic_runtime(),
+            run_builds=False,
+        )
 
         self.assertEqual(["src/pages/Profile.jsx"], result["architect_plan"]["target_files"])
         self.assertIn("ready_for_pr", result)
@@ -120,6 +139,41 @@ class CrewEngineTests(unittest.TestCase):
         self.assertIn("pr_summary", result)
         self.assertNotIn("phase1", str(result).lower())
         self.assertNotIn("phase2", str(result).lower())
+
+    def test_verified_workflow_removes_cache_created_by_build(self):
+        with tempfile.TemporaryDirectory(prefix="visionpr verified workflow ") as directory:
+            repo = Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.name", "VisionPR Tests"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.email", "tests@visionpr.local"], cwd=repo, check=True)
+            (repo / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+            subprocess.run(["git", "add", "app.py"], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-qm", "initial"], cwd=repo, check=True)
+
+            class Architect:
+                def create_plan(self, agentic_input):
+                    return ArchitectPlan("Update value", ["app.py"], [], ["Set VALUE to 2"], ["Edit app.py"], [])
+
+            class Coder:
+                def implement_plan(self, agentic_input, plan, revision_request=None):
+                    (repo / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+                    return CoderResult(["app.py"], "Updated value")
+
+            payload = sample_agentic_input()
+            payload["build_commands"] = ["python -m compileall ."]
+            result = run_agentic_workflow(
+                payload,
+                repo_path=repo,
+                architect=Architect(),
+                coder=Coder(),
+                reviewer=ApprovingReviewer(),
+                runtime=heuristic_runtime(),
+                verify_worktree=True,
+            )
+
+            self.assertEqual("APPROVED_FOR_PR", result["status"])
+            self.assertEqual(["app.py"], result["changed_files"])
+            self.assertFalse((repo / "__pycache__").exists())
 
 
 if __name__ == "__main__":

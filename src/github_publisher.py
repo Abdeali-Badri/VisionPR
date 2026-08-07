@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import logging
 import os
@@ -105,11 +106,29 @@ def _load_environment() -> None:
 
 
 def _secret_values() -> list[str]:
-    return [value for value in (os.getenv("GITHUB_TOKEN"),) if value]
+    token = os.getenv("GITHUB_TOKEN")
+    values = [token] if token else []
+    if token:
+        values.append(base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode("ascii"))
+    return values
+
+
+def _git_environment() -> dict[str, str]:
+    env = dict(os.environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GCM_INTERACTIVE"] = "Never"
+    token = os.getenv("GITHUB_TOKEN", "").strip()
+    if token:
+        basic = base64.b64encode(f"x-access-token:{token}".encode("utf-8")).decode("ascii")
+        env["GIT_CONFIG_COUNT"] = "1"
+        env["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader"
+        env["GIT_CONFIG_VALUE_0"] = f"AUTHORIZATION: basic {basic}"
+    return env
 
 
 def sanitize_text(value: Any) -> str:
     text = str(value or "")
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
     for secret in _secret_values():
         text = text.replace(secret, "[REDACTED]")
     text = re.sub(r"(?i)(authorization:\s*(?:bearer|token)\s+)\S+", r"\1[REDACTED]", text)
@@ -135,6 +154,7 @@ def run_git(
             timeout=timeout,
             shell=False,
             check=False,
+            env=_git_environment(),
         )
     except subprocess.TimeoutExpired as exc:
         raise VisionPRError(
@@ -451,13 +471,16 @@ def create_or_get_pull_request(
     head_branch: str,
     title: str,
     body: str,
+    *,
+    head_owner: str | None = None,
 ) -> dict[str, Any]:
     repository = _github_repository(repository_name)
-    owner = repository_name.split("/", 1)[0]
+    owner = head_owner or repository_name.split("/", 1)[0]
+    head_ref = f"{owner}:{head_branch}"
     try:
-        pulls = repository.get_pulls(state="open", head=f"{owner}:{head_branch}", base=base_branch)
+        pulls = repository.get_pulls(state="open", head=head_ref, base=base_branch)
         existing = next(iter(pulls), None)
-        pr = existing or repository.create_pull(title=sanitize_text(title), body=sanitize_text(body), base=base_branch, head=head_branch)
+        pr = existing or repository.create_pull(title=sanitize_text(title), body=sanitize_text(body), base=base_branch, head=head_ref)
         return {"number": pr.number, "url": pr.html_url, "created": existing is None, "object": pr}
     except Exception as exc:
         raise VisionPRError("PR_CREATION_FAILED", "Pull Request creation failed.", operation="create_pull_request", details={"reason": sanitize_text(exc)}) from exc
@@ -623,9 +646,13 @@ def publish_pull_request(pipeline_result: dict, repo_path: str | None = None) ->
     repository_path = Path(str(selected_path)).expanduser().resolve()
     remote = os.getenv("GITHUB_REMOTE_NAME", "origin")
     base = str(pipeline_result.get("base_branch") or os.getenv("GITHUB_BASE_BRANCH", "main"))
-    repository_name = os.getenv("GITHUB_REPOSITORY", "").strip()
+    repository_name = str(pipeline_result.get("source_repository") or os.getenv("GITHUB_REPOSITORY", "")).strip()
     if not re.fullmatch(r"[^/\s]+/[^/\s]+", repository_name):
-        raise VisionPRError("INVALID_GITHUB_REPOSITORY", "GITHUB_REPOSITORY must use owner/repository format.", operation="validate_configuration")
+        raise VisionPRError("INVALID_GITHUB_REPOSITORY", "Source repository must use owner/repository format.", operation="validate_configuration")
+    push_repository = str(pipeline_result.get("push_repository") or repository_name).strip()
+    if not re.fullmatch(r"[^/\s]+/[^/\s]+", push_repository):
+        raise VisionPRError("INVALID_GITHUB_REPOSITORY", "Push repository must use owner/repository format.", operation="validate_configuration")
+    head_owner = str(pipeline_result.get("head_owner") or push_repository.split("/", 1)[0]).strip()
 
     validate_repository(repository_path, remote, base)
     files = validate_changed_files(repository_path, pipeline_result.get("changed_files") or [])
@@ -637,10 +664,12 @@ def publish_pull_request(pipeline_result: dict, repo_path: str | None = None) ->
     parsed_repository = _parse_remote_repository(remote_url)
     if not parsed_repository:
         raise VisionPRError("UNSUPPORTED_REMOTE", "The configured remote is not a recognizable GitHub repository.", operation="validate_repository")
-    if parsed_repository.lower() != repository_name.lower():
-        raise VisionPRError("REPOSITORY_MISMATCH", "Configured GitHub repository does not match the local Git remote.", operation="validate_repository")
+    if parsed_repository.lower() != push_repository.lower():
+        raise VisionPRError("REPOSITORY_MISMATCH", "Writable GitHub repository does not match the local Git remote.", operation="validate_repository")
 
     _github_repository(repository_name)  # Fail before changing branches when auth is invalid.
+    if push_repository.lower() != repository_name.lower():
+        _github_repository(push_repository)
     run_git(repository_path, "fetch", "--prune", remote)
     branch = create_or_checkout_feature_branch(repository_path, run_id, safe_requirement, base, remote)
     staged = stage_intended_files(repository_path, files)
@@ -673,7 +702,14 @@ def publish_pull_request(pipeline_result: dict, repo_path: str | None = None) ->
     if remote_sha != commit_sha:
         push_branch(repository_path, remote, branch)
     pr_body = _build_pr_body(pipeline_result, published_files, commit_sha, iteration)
-    pr_info = create_or_get_pull_request(repository_name, base, branch, f"VisionPR: {safe_requirement[:80]}", pr_body)
+    pr_info = create_or_get_pull_request(
+        repository_name,
+        base,
+        branch,
+        f"VisionPR: {safe_requirement[:80]}",
+        pr_body,
+        head_owner=head_owner,
+    )
     marker = f"VisionPR Engineer Review Summary - Iteration {iteration}"
     post_engineer_summary(pr_info["number"], _engineer_summary(pipeline_result, published_files, commit_sha, iteration), repository_name, marker)
     now = utc_now()
@@ -681,6 +717,8 @@ def publish_pull_request(pipeline_result: dict, repo_path: str | None = None) ->
         "status": "PR_OPENED",
         "run_id": run_id,
         "repository": repository_name,
+        "push_repository": push_repository,
+        "head_owner": head_owner,
         "repo_path": str(repository_path),
         "base_branch": base,
         "head_branch": branch,

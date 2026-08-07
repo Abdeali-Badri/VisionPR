@@ -97,10 +97,12 @@ class CorrectionContractTests(unittest.TestCase):
         with self.assertRaisesRegex(VisionPRError, "already submitted"):
             gate._validate_correction_result(valid, self.feedback, 2, self.repo, ["app.py"], [valid["patch_fingerprint"]])
 
-    def test_missing_adapter_returns_specific_error(self):
-        with self.assertRaises(VisionPRError) as caught:
-            gate.execute_feedback_iteration({})
-        self.assertEqual("CREWAI_INTEGRATION_UNAVAILABLE", caught.exception.code)
+    @patch("src.crew_engine.run_feedback_iteration", return_value={"status": "REJECTED", "errors": ["invalid"]})
+    def test_feedback_adapter_is_available(self, adapter):
+        request = {"review_iteration": 2}
+        result = gate.execute_feedback_iteration(request)
+        self.assertEqual("REJECTED", result["status"])
+        adapter.assert_called_once_with(request)
 
 
 class CorrectionCycleTests(unittest.TestCase):

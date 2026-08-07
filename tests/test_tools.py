@@ -7,7 +7,10 @@ from unittest.mock import Mock, patch
 from src.tools import (
     ALLOWED_BUILD_COMMAND_PREFIXES,
     ToolSafetyError,
+    cleanup_generated_build_artifacts,
+    list_worktree_changes,
     read_file,
+    read_git_diff,
     run_build_plan,
     run_build_test,
     validate_build_command,
@@ -45,6 +48,16 @@ class SafeFileToolTests(unittest.TestCase):
             "generated\n",
             (self.repo / "nested" / "directory" / "generated_file.txt").read_text(encoding="utf-8"),
         )
+
+    def test_reject_destructive_partial_overwrite(self):
+        source = self.repo / "src" / "large_module.py"
+        original = "".join(f"VALUE_{index} = {index}\n" for index in range(120))
+        source.write_text(original, encoding="utf-8")
+
+        with self.assertRaisesRegex(ToolSafetyError, "destructive partial overwrite"):
+            write_file(self.repo, "src/large_module.py", "import os\nimport sys\n")
+
+        self.assertEqual(original, source.read_text(encoding="utf-8"))
 
     def test_reject_absolute_path(self):
         with self.assertRaises(ToolSafetyError):
@@ -85,6 +98,47 @@ class SafeFileToolTests(unittest.TestCase):
     def test_reject_missing_file_cleanly(self):
         with self.assertRaisesRegex(ToolSafetyError, "does not exist"):
             read_file(self.repo, "missing.py")
+
+
+class GitInspectionToolTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix="visionpr git tools ")
+        self.repo = Path(self.temporary.name)
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        subprocess.run(["git", "config", "user.name", "VisionPR Tests"], cwd=self.repo, check=True)
+        subprocess.run(["git", "config", "user.email", "tests@visionpr.local"], cwd=self.repo, check=True)
+        (self.repo / "tracked.py").write_text("VALUE = 1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "tracked.py"], cwd=self.repo, check=True)
+        subprocess.run(["git", "commit", "-qm", "initial"], cwd=self.repo, check=True)
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_lists_real_tracked_and_untracked_changes(self):
+        (self.repo / "tracked.py").write_text("VALUE = 2\n", encoding="utf-8")
+        (self.repo / "new.txt").write_text("new\n", encoding="utf-8")
+
+        self.assertEqual(["new.txt", "tracked.py"], list_worktree_changes(self.repo))
+        self.assertIn("+VALUE = 2", read_git_diff(self.repo))
+
+    def test_clean_repository_has_no_patch(self):
+        self.assertEqual([], list_worktree_changes(self.repo))
+        self.assertEqual("", read_git_diff(self.repo))
+
+    def test_cleanup_removes_only_new_untracked_cache_files(self):
+        existing = self.repo / "existing.txt"
+        existing.write_text("keep\n", encoding="utf-8")
+        before = list_worktree_changes(self.repo)
+        cache = self.repo / "__pycache__"
+        cache.mkdir()
+        generated = cache / "tracked.cpython-312.pyc"
+        generated.write_bytes(b"cache")
+
+        removed = cleanup_generated_build_artifacts(self.repo, before)
+
+        self.assertEqual(["__pycache__/tracked.cpython-312.pyc"], removed)
+        self.assertFalse(cache.exists())
+        self.assertTrue(existing.exists())
 
 
 class BuildCommandValidationTests(unittest.TestCase):

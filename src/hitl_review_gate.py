@@ -273,6 +273,8 @@ def create_redo_request(pipeline_context: dict, feedback: list[dict], iteration:
         "target_files": list(pipeline_context.get("target_files") or pipeline_context.get("changed_files") or []),
         "repo_path": pipeline_context.get("repo_path"),
         "branch_name": pipeline_context.get("head_branch"),
+        "build_commands": list(pipeline_context.get("build_commands") or []),
+        "meeting_issue_context": dict(pipeline_context.get("meeting_issue_context") or {}),
         "constraints": [
             "Address every actionable engineer comment",
             "Do not modify unrelated files",

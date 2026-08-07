@@ -20,7 +20,7 @@ Environment variables (.env):
 Optional:
     GROQ_WHISPER_MODEL=whisper-large-v3-turbo
     GROQ_TEXT_MODEL=llama-3.3-70b-versatile
-    GROQ_VISION_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
+    GROQ_VISION_MODEL=qwen/qwen3.6-27b
     FFMPEG_PATH=ffmpeg
     FFPROBE_PATH=ffprobe
     CONTEXT_BEFORE=3
@@ -31,11 +31,12 @@ Optional:
 
 import argparse
 import base64
+import io
 import json
 import logging
-import mimetypes
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -44,6 +45,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 from groq import Groq
+from PIL import Image
 
 
 # ============================================================
@@ -83,11 +85,20 @@ TEXT_MODEL = os.getenv(
 
 VISION_MODEL = os.getenv(
     "GROQ_VISION_MODEL",
-    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "qwen/qwen3.6-27b",
 )
 
-FFMPEG_PATH = os.getenv("FFMPEG_PATH", "ffmpeg")
-FFPROBE_PATH = os.getenv("FFPROBE_PATH", "ffprobe")
+def resolve_media_binary(configured: str) -> str:
+    """Resolve media binaries before subprocess creation on Windows."""
+    value = configured.strip()
+    candidate = Path(value).expanduser()
+    if candidate.is_file():
+        return str(candidate.resolve())
+    return shutil.which(value) or value
+
+
+FFMPEG_PATH = resolve_media_binary(os.getenv("FFMPEG_PATH", "ffmpeg"))
+FFPROBE_PATH = resolve_media_binary(os.getenv("FFPROBE_PATH", "ffprobe"))
 
 CONTEXT_BEFORE = float(
     os.getenv("CONTEXT_BEFORE", "3")
@@ -104,6 +115,9 @@ FRAME_INTERVAL = float(
 MAX_KEY_POINTS = int(
     os.getenv("MAX_KEY_POINTS", "10")
 )
+
+MAX_VISION_FRAMES = max(1, int(os.getenv("MAX_VISION_FRAMES", "3")))
+MAX_VISION_IMAGE_DIMENSION = max(256, int(os.getenv("MAX_VISION_IMAGE_DIMENSION", "640")))
 
 MAX_RETRIES = 3
 
@@ -124,13 +138,15 @@ logger = logging.getLogger("VisionPR")
 # GROQ CLIENT
 # ============================================================
 
-if not GROQ_API_KEY:
-    raise RuntimeError(
-        "GROQ_API_KEY is missing. "
-        "Add GROQ_API_KEY=your_key to the .env file."
-    )
+client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
-client = Groq(api_key=GROQ_API_KEY)
+
+def require_groq_client() -> Groq:
+    if client is None:
+        raise RuntimeError(
+            "GROQ_API_KEY is missing. Add GROQ_API_KEY=your_key to the .env file."
+        )
+    return client
 
 
 # ============================================================
@@ -451,7 +467,7 @@ def transcribe_audio(
             "rb",
         ) as audio_file:
 
-            return client.audio.transcriptions.create(
+            return require_groq_client().audio.transcriptions.create(
                 file=audio_file,
                 model=WHISPER_MODEL,
                 response_format="verbose_json",
@@ -616,7 +632,7 @@ Transcript:
 
     def call_translation():
 
-        response = client.chat.completions.create(
+        response = require_groq_client().chat.completions.create(
             model=TEXT_MODEL,
             messages=[
                 {
@@ -664,8 +680,9 @@ def extract_key_points(
     prompt = f"""
 Analyze the following meeting transcript.
 
-Identify the most important actionable points
-that are relevant to software development.
+Identify only explicit, actionable requests to change the supplied software.
+A point is actionable only when a speaker asks, directs, or clearly agrees to
+modify code, behavior, UI, configuration, tests, documentation, or performance.
 
 Prioritize:
 1. Bug reports
@@ -681,6 +698,10 @@ Ignore:
 - Small talk
 - Repeated statements
 - Irrelevant conversation
+- Tutorials, definitions, general advice, and descriptions of technology
+- Product observations that do not request a change
+
+If the transcript contains no explicit software change request, return [].
 
 Return ONLY a valid JSON array.
 
@@ -690,6 +711,7 @@ Each item MUST have:
     "point": "Short description of the issue or request",
     "original_quote": "Exact or near-exact relevant quote",
     "english_quote": "English version of the quote",
+    "actionable_change": true,
     "timestamp": 0
 }}
 
@@ -704,7 +726,7 @@ Transcript:
 
     def call_key_points():
 
-        response = client.chat.completions.create(
+        response = require_groq_client().chat.completions.create(
             model=TEXT_MODEL,
             messages=[
                 {
@@ -762,6 +784,7 @@ Transcript:
             item,
             dict,
         )
+        and item.get("actionable_change") is True
     ]
 
 
@@ -991,6 +1014,8 @@ Relevant quote:
 {key_point.get("english_quote", "")}
 
 Analyze the provided screenshots.
+When an image contains stacked panels, read them chronologically from top to bottom
+as before, current, and after context.
 
 Focus on:
 - Visible application UI
@@ -1034,55 +1059,73 @@ Return ONLY valid JSON with this structure:
         }
     )
 
-    for frame in frames:
+    # Keep the full extracted evidence on disk while sampling a provider-safe
+    # before/current/after set for multimodal analysis.
+    selected_frames = frames
+    if len(frames) > MAX_VISION_FRAMES:
+        if MAX_VISION_FRAMES == 1:
+            selected_frames = [frames[len(frames) // 2]]
+        else:
+            selected_frames = [
+                frames[round(index * (len(frames) - 1) / (MAX_VISION_FRAMES - 1))]
+                for index in range(MAX_VISION_FRAMES)
+            ]
 
-        frame_path = Path(
-            frame["absolute_path"]
-        )
-
+    images = []
+    for frame in selected_frames:
+        frame_path = Path(frame["absolute_path"])
         if not frame_path.exists():
-
             continue
+        with Image.open(frame_path) as source:
+            image = source.convert("RGB")
+            image.thumbnail((MAX_VISION_IMAGE_DIMENSION, MAX_VISION_IMAGE_DIMENSION))
+            images.append(image.copy())
 
-        mime_type = (
-            mimetypes.guess_type(
-                str(frame_path)
-            )[0]
-            or "image/jpeg"
-        )
-
-        encoded_image = base64.b64encode(
-            frame_path.read_bytes()
-        ).decode(
-            "utf-8"
-        )
-
+    if images:
+        width = max(image.width for image in images)
+        height = sum(image.height for image in images)
+        contact_sheet = Image.new("RGB", (width, height), "white")
+        offset = 0
+        for image in images:
+            contact_sheet.paste(image, ((width - image.width) // 2, offset))
+            offset += image.height
+        contact_sheet.thumbnail((MAX_VISION_IMAGE_DIMENSION, MAX_VISION_IMAGE_DIMENSION))
+        buffer = io.BytesIO()
+        contact_sheet.save(buffer, format="JPEG", quality=82, optimize=True)
+        encoded_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
         content.append(
             {
                 "type": "image_url",
-                "image_url": {
-                    "url": (
-                        f"data:{mime_type};"
-                        f"base64,{encoded_image}"
-                    )
-                },
+                "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"},
             }
         )
 
     def call_vision():
-
-        response = client.chat.completions.create(
-            model=VISION_MODEL,
-            messages=[
-                {
-                    "role": "user",
-                    "content": content,
-                }
-            ],
-            temperature=0,
-        )
-
-        return response.choices[0].message.content
+        request = {
+            "model": VISION_MODEL,
+            "messages": [{"role": "user", "content": content}],
+            "temperature": 0,
+            "max_completion_tokens": 1600,
+            "response_format": {"type": "json_object"},
+        }
+        if VISION_MODEL.startswith("qwen/"):
+            # Qwen vision otherwise spends its output budget on a <think> trace,
+            # which can cause Groq's JSON validator to reject an empty answer.
+            request["reasoning_effort"] = "none"
+        try:
+            response = require_groq_client().chat.completions.create(**request)
+        except Exception as exc:
+            message = str(exc).lower()
+            json_mode_failed = "json_validate_failed" in message or "failed to validate json" in message
+            if not json_mode_failed:
+                raise
+            logger.warning("Vision JSON mode was rejected; retrying once with prompt-enforced JSON.")
+            request.pop("response_format", None)
+            response = require_groq_client().chat.completions.create(**request)
+        result = str(response.choices[0].message.content or "").strip()
+        if not result:
+            raise RuntimeError("Groq vision response did not contain output text.")
+        return result
 
     response_text = retry_operation(
         call_vision
@@ -1102,20 +1145,9 @@ Return ONLY valid JSON with this structure:
             return result
 
     except Exception as exc:
+        raise RuntimeError("Vision model returned output that was not valid JSON.") from exc
 
-        logger.warning(
-            "Vision JSON parsing failed: %s",
-            exc,
-        )
-
-    # Graceful fallback
-    return {
-        "summary": response_text,
-        "observations": [],
-        "visible_errors": [],
-        "visible_files": [],
-        "relevant_ui_elements": [],
-    }
+    raise RuntimeError("Vision model returned JSON with an unexpected top-level type.")
 
 
 # ============================================================
@@ -1287,6 +1319,7 @@ def process_video(
     # --------------------------------------------------------
 
     visual_context = []
+    visual_cache: dict[float, dict[str, Any]] = {}
 
     for index, key_point in enumerate(
         key_points,
@@ -1306,6 +1339,19 @@ def process_video(
             timestamp,
         )
 
+        cache_key = round(timestamp, 1)
+        cached = visual_cache.get(cache_key)
+        if cached:
+            visual_context.append(
+                {
+                    "key_point_index": index,
+                    "timestamp": timestamp,
+                    "frames": list(cached["frames"]),
+                    "analysis": dict(cached["analysis"]),
+                }
+            )
+            continue
+
         try:
 
             frames = extract_context_frames(
@@ -1322,17 +1368,14 @@ def process_video(
                 )
             )
 
-            visual_context.append(
-                {
-                    "key_point_index": index,
-                    "timestamp": timestamp,
-                    "frames": [
-                        frame["path"]
-                        for frame in frames
-                    ],
-                    "analysis": vision_analysis,
-                }
-            )
+            visual_result = {
+                "key_point_index": index,
+                "timestamp": timestamp,
+                "frames": [frame["path"] for frame in frames],
+                "analysis": vision_analysis,
+            }
+            visual_context.append(visual_result)
+            visual_cache[cache_key] = visual_result
 
         except Exception as exc:
 
@@ -1358,6 +1401,14 @@ def process_video(
                     },
                 }
             )
+
+    failed_visuals = [item for item in visual_context if (item.get("analysis") or {}).get("error")]
+    if key_points and len(failed_visuals) == len(key_points):
+        first_error = str((failed_visuals[0].get("analysis") or {}).get("error") or "Unknown vision error")
+        raise RuntimeError(
+            "Visual analysis failed for every extracted key point. "
+            f"First provider error: {first_error[:800]}"
+        )
 
     # --------------------------------------------------------
     # Step 8 - Final JSON

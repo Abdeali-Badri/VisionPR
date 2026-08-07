@@ -7,6 +7,7 @@ from src.crewai_agents import (
     CrewAIArchitectAgent,
     CrewAICoderAgent,
     CrewAIReviewerAgent,
+    SafeGitDiffTool,
     SafeReadFileTool,
     SafeWriteFileTool,
     ValidatedBuildPlanTool,
@@ -86,6 +87,48 @@ class CrewAIAdapterTests(unittest.TestCase):
         plan = CrewAIArchitectAgent(self.llm).create_plan(agentic_input())
         self.assertEqual(["profile.py"], plan.target_files)
 
+    def test_architect_prompt_compacts_large_repository_context(self):
+        self.next_result = self.fake_kickoff(
+            {
+                "suspected_cause": "handler",
+                "target_files": ["src/file_00.py"],
+                "files_to_avoid": [],
+                "required_changes": ["change"],
+                "implementation_steps": ["inspect and edit"],
+                "test_plan": ["python -m unittest discover"],
+                "risk_notes": [],
+            }
+        )
+        large_input = AgenticInput.from_dict(
+            {
+                "run_id": "large-context",
+                "issue_summary": "Fix the request handler",
+                "meeting_issue_context": {
+                    "english_quote": "Update the request handler.",
+                    "transcript_segments": [{"text": "meeting evidence " * 500}],
+                },
+                "repository_context": {
+                    "repo_tree": "\n".join(f"src/file_{index:02d}.py" for index in range(1000)),
+                    "relevant_files": [
+                        {
+                            "path": f"src/file_{index:02d}.py",
+                            "summary": "Python source file",
+                            "symbols": ["handle_request"],
+                            "content_excerpt": f"# ranked file {index}\n" + ("value = 1\n" * 1000),
+                        }
+                        for index in range(12)
+                    ],
+                },
+            }
+        )
+
+        CrewAIArchitectAgent(self.llm).create_plan(large_input)
+
+        description = self.task_mock.call_args.kwargs["description"]
+        self.assertLessEqual(len(description), 20_000)
+        self.assertIn("src/file_00.py", description)
+        self.assertIn("ranked file 0", description)
+
     def test_architect_rejects_invalid_output(self):
         self.next_result = self.fake_kickoff({"target_files": ["profile.py"]})
         with self.assertRaises(CrewAIAdapterError):
@@ -103,9 +146,27 @@ class CrewAIAdapterTests(unittest.TestCase):
             }
         )
         coder = CrewAICoderAgent(self.llm, repo_path=".")
-        self.assertTrue(all(isinstance(tool, (SafeReadFileTool, SafeWriteFileTool, ValidatedBuildPlanTool)) for tool in coder._tools()))
+        self.assertTrue(
+            all(
+                isinstance(tool, (SafeReadFileTool, SafeWriteFileTool, SafeGitDiffTool, ValidatedBuildPlanTool))
+                for tool in coder._tools()
+            )
+        )
         result = coder.implement_plan(agentic_input(), ArchitectPlan("cause", ["profile.py"], [], [], [], []))
         self.assertEqual(["profile.py"], result.modified_files)
+
+    @patch("src.crewai_agents.cleanup_generated_build_artifacts")
+    @patch("src.crewai_agents.run_build_plan", return_value={"status": "success", "commands": []})
+    @patch("src.crewai_agents.list_worktree_changes", return_value=["README.md"])
+    def test_validated_build_tool_cleans_new_generated_artifacts(self, changes, run_build, cleanup):
+        tool = ValidatedBuildPlanTool(repo_path=".")
+
+        result = tool._run(["python -m compileall ."])
+
+        self.assertEqual("success", result["status"])
+        changes.assert_called_once_with(".")
+        run_build.assert_called_once_with(".", ["python -m compileall ."])
+        cleanup.assert_called_once_with(".", ["README.md"])
 
     def test_reviewer_returns_structured_result(self):
         self.next_result = self.fake_kickoff(
@@ -132,7 +193,8 @@ class CrewAIAdapterTests(unittest.TestCase):
         kwargs = agent["agent_kwargs"]
         self.assertIs(self.llm, kwargs["llm"])
         self.assertFalse(kwargs["allow_delegation"])
-        self.assertLessEqual(kwargs["max_iter"], 3)
+        self.assertGreaterEqual(kwargs["max_iter"], 5)
+        self.assertLessEqual(kwargs["max_iter"], 8)
         self.assertFalse(kwargs["allow_code_execution"])
 
     def test_llm_is_required(self):

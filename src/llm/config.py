@@ -10,6 +10,7 @@ from src.llm.providers import LLMProvider, parse_llm_provider
 
 
 GEMINI_DEFAULT_MODEL = "gemini/gemini-2.5-flash"
+GROQ_DEFAULT_MODEL = "groq/llama-3.3-70b-versatile"
 
 
 @dataclass(frozen=True)
@@ -62,7 +63,7 @@ def normalize_model(provider: LLMProvider, model: str | None) -> str:
         return f"gemini/{cleaned}"
     if provider == LLMProvider.GROQ:
         if not cleaned:
-            raise RuntimeConfigError("Groq was selected, but VISIONPR_LLM_MODEL is not configured.")
+            return GROQ_DEFAULT_MODEL
         if cleaned.startswith("groq/"):
             return cleaned
         return f"groq/{cleaned}"
@@ -80,5 +81,7 @@ def load_llm_config() -> LLMConfig:
     explicit_provider = os.getenv("VISIONPR_LLM_PROVIDER")
     model = os.getenv("VISIONPR_LLM_MODEL") or None
     provider = parse_llm_provider(explicit_provider) if explicit_provider else _infer_provider(model)
+    if not model:
+        model = os.getenv("GEMINI_MODEL") if provider == LLMProvider.GEMINI else os.getenv("GROQ_MODEL")
     validate_provider_credentials(provider)
     return LLMConfig(provider=provider, model=normalize_model(provider, model))

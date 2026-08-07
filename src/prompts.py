@@ -22,9 +22,16 @@ Rules:
 - Pick the smallest set of target files likely to solve the issue.
 - State which files must not be touched.
 - Do not invent codebase details that are not present in the repository context.
+- Repository context is intentionally ranked and size-bounded. Use safe_read_file
+  to inspect candidate files in bounded line ranges before finalizing the plan.
 - Do not include secrets, environment variables, or API keys.
 - Prefer the project's existing style and helpers.
 - Include exact tests or build commands when available.
+- Treat setup and documentation requests as non-behavioral unless the meeting
+  explicitly asks to change runtime behavior. Do not include application source
+  files merely because their imports help identify dependencies.
+- A requested virtual environment means documenting the creation command and
+  ignoring the generated environment directory. Never plan to commit a venv.
 """
 
 
@@ -45,6 +52,15 @@ Return structured JSON matching CoderResult:
 
 Rules:
 - Return structured output only; do not include hidden reasoning or prompt text.
+- You must call safe_read_file before editing and safe_write_file for every edit.
+- After writing, call safe_git_diff and report only paths that appear in that diff.
+- An answer that describes proposed code without calling safe_write_file is a failed task.
+- Every safe_write_file call replaces the entire file. When editing an existing
+  file, preserve all unrelated content and never submit a partial excerpt.
+- For setup or documentation tasks, do not edit application source unless the
+  Architect plan explicitly identifies a requested runtime behavior change.
+- Never create or commit a virtual environment. Document its creation command
+  and add the generated directory to the repository's ignore file instead.
 - Modify only files named in target_files unless the plan is impossible.
 - If you must deviate from the plan, explain why in assumptions.
 - Do not touch files listed in files_to_avoid.
@@ -84,6 +100,7 @@ Review checklist:
 - Is the patch small enough for human review?
 - Were protected files or unsafe paths avoided?
 - Are changed files and build results internally consistent?
+- Inspect the supplied actual repository diff; never approve a claimed change when the diff is empty.
 
 If the answer is not clearly safe, return NEEDS_REVISION with concrete feedback.
 """

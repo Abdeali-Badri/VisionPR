@@ -22,7 +22,7 @@ from src.schemas import (
     ReviewerResult,
     RevisionRequest,
 )
-from src.tools import run_build_plan
+from src.tools import cleanup_generated_build_artifacts, list_worktree_changes, run_build_plan
 from src.offline_agents import (
     HeuristicArchitectAgent,
     OfflineArchitectAgent,
@@ -198,10 +198,19 @@ def run_agentic_workflow(
     reviewer: ReviewerAgent | None = None,
     runtime: RuntimeConfig | None = None,
     run_builds: bool = True,
+    verify_worktree: bool = False,
 ) -> dict[str, Any]:
     """Run the three-agent workflow and return a Phase 4-ready result shape."""
     if isinstance(agentic_input, dict):
         agentic_input = AgenticInput.from_dict(agentic_input)
+
+    if verify_worktree:
+        initial_changes = list_worktree_changes(repo_path)
+        if initial_changes:
+            raise ValueError(
+                "The managed target repository must be clean before an agent run: "
+                + ", ".join(initial_changes)
+            )
 
     if architect is None or coder is None or reviewer is None or runtime is None:
         from src.agent_factory import create_agent_bundle
@@ -225,8 +234,27 @@ def run_agentic_workflow(
     max_attempts = max(1, agentic_input.max_review_attempts)
     for attempt in range(1, max_attempts + 1):
         coder_result = coder_agent.implement_plan(agentic_input, plan, revision_request)
+        if verify_worktree:
+            actual_files = list_worktree_changes(repo_path)
+            reported_files = sorted(set(coder_result.modified_files))
+            assumptions = list(coder_result.assumptions)
+            if reported_files != actual_files:
+                assumptions.append(
+                    "VisionPR reconciled the model's modified_files claim with the actual Git worktree."
+                )
+            coder_result = CoderResult(
+                modified_files=actual_files,
+                change_summary=coder_result.change_summary,
+                patch_notes=coder_result.patch_notes,
+                assumptions=assumptions,
+                build_attempted=coder_result.build_attempted,
+                build_result=coder_result.build_result,
+            )
         if run_builds and coder_result.modified_files and agentic_input.build_commands:
+            changes_before_build = list_worktree_changes(repo_path) if verify_worktree else []
             build_result = run_build_plan(repo_path, agentic_input.build_commands)
+            if verify_worktree:
+                cleanup_generated_build_artifacts(repo_path, changes_before_build)
             coder_result = CoderResult(
                 modified_files=coder_result.modified_files,
                 change_summary=coder_result.change_summary,
@@ -272,3 +300,88 @@ def run_agentic_workflow(
 def run_agentic_workflow_from_file(path: str | Path, *, repo_path: str | Path = ".") -> dict[str, Any]:
     """Convenience entry point for local demos and pipeline orchestration."""
     return run_agentic_workflow(load_agentic_input(path), repo_path=repo_path)
+
+
+def run_feedback_iteration(redo_request: dict[str, Any]) -> dict[str, Any]:
+    """Apply one human-review correction using the shared Phase 3 workflow."""
+    from src.codebase_mapper import build_repository_context
+    from src.github_publisher import compute_patch_fingerprint
+
+    repo_path = Path(str(redo_request.get("repo_path") or "")).resolve()
+    iteration = int(redo_request.get("review_iteration") or 0)
+    feedback = list(redo_request.get("engineer_feedback") or [])
+    errors: list[str] = []
+    if not repo_path.is_dir():
+        errors.append("Correction repository path does not exist.")
+    if iteration < 2:
+        errors.append("Correction iteration must be at least 2.")
+    if not feedback:
+        errors.append("No actionable engineer feedback was supplied.")
+    if errors:
+        return {
+            "status": "REJECTED",
+            "iteration": iteration,
+            "changed_files": [],
+            "change_summary": "Correction request was invalid.",
+            "feedback_resolution": [],
+            "validation": {},
+            "errors": errors,
+        }
+
+    feedback_text = "\n".join(
+        f"- {item.get('body', '')}" + (f" ({item.get('path')}:{item.get('line')})" if item.get("path") else "")
+        for item in feedback
+    )
+    issue_summary = (
+        f"Revise the previous change for: {redo_request.get('original_requirement', '')}\n"
+        f"Human review feedback:\n{feedback_text}"
+    )
+    agentic_input = AgenticInput(
+        run_id=str(redo_request.get("run_id") or "visionpr-review-correction"),
+        issue_summary=issue_summary,
+        meeting_issue_context=dict(redo_request.get("meeting_issue_context") or {}),
+        repository_context=build_repository_context(repo_path, issue_summary),
+        build_commands=list(redo_request.get("build_commands") or []),
+        constraints=list(redo_request.get("constraints") or []),
+        max_review_attempts=3,
+    )
+    workflow = run_agentic_workflow(agentic_input, repo_path=repo_path, verify_worktree=True)
+    changed_files = list(workflow.get("changed_files") or [])
+    build_result = dict(workflow.get("build_result") or {})
+    ready = bool(workflow.get("ready_for_pr")) and str(build_result.get("status") or "").lower() == "success"
+    if not ready:
+        return {
+            "status": "REJECTED",
+            "iteration": iteration,
+            "changed_files": changed_files,
+            "change_summary": str((workflow.get("coder_result") or {}).get("change_summary") or "Correction was not approved."),
+            "feedback_resolution": [],
+            "validation": {"build": build_result, "tests": {"status": "FAILED"}},
+            "errors": ["Phase 3 did not approve the correction with a successful build."],
+        }
+
+    fingerprint = compute_patch_fingerprint(repo_path, changed_files)
+    change_summary = str((workflow.get("coder_result") or {}).get("change_summary") or "Addressed human review feedback.")
+    resolutions = [
+        {
+            "github_id": int(item["github_id"]),
+            "file": item.get("path"),
+            "status": "RESOLVED",
+            "resolution": change_summary,
+            "verification": "The corrected patch passed the configured build and test plan.",
+        }
+        for item in feedback
+    ]
+    return {
+        "status": "APPROVED_FOR_HUMAN_REVIEW",
+        "iteration": iteration,
+        "changed_files": changed_files,
+        "change_summary": change_summary,
+        "feedback_resolution": resolutions,
+        "patch_fingerprint": fingerprint,
+        "validation": {
+            "build": build_result,
+            "tests": {"status": "SUCCESS"},
+        },
+        "errors": [],
+    }

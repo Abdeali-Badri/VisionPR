@@ -128,6 +128,22 @@ class GithubPublishingTests(RepositoryCase):
         self.assertNotIn("test-token-secret", repository.create_pull.call_args.kwargs["title"])
         self.assertNotIn("test-token-secret", repository.create_pull.call_args.kwargs["body"])
 
+    def test_create_pull_supports_branch_from_fork_owner(self):
+        created = Mock(number=9, html_url="https://github.test/pr/9")
+        repository = Mock()
+        repository.get_pulls.return_value = []
+        repository.create_pull.return_value = created
+        with patch.object(publisher, "_github_repository", return_value=repository):
+            publisher.create_or_get_pull_request(
+                "upstream/project",
+                "main",
+                "visionpr/change-run",
+                "Title",
+                "Body",
+                head_owner="contributor",
+            )
+        self.assertEqual("contributor:visionpr/change-run", repository.create_pull.call_args.kwargs["head"])
+
     def test_publish_creates_branch_commit_pr_and_state(self):
         (self.repo / "app.py").write_text("print('after')\n", encoding="utf-8")
         pr_result = {"number": 12, "url": "https://github.test/pr/12", "created": True, "object": Mock()}

@@ -9,12 +9,41 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from pathlib import Path
 from typing import Iterable
 
 
-SKIP_NAMES = {".git", "node_modules", "__pycache__", ".env"}
+SKIP_NAMES = {
+    ".git",
+    ".venv",
+    "venv",
+    "node_modules",
+    "__pycache__",
+    ".env",
+    ".next",
+    ".cache",
+    "build",
+    "dist",
+    "target",
+}
 OUTPUT_PATH = Path("data") / "output_json" / "codebase_map.json"
+TEXT_SUFFIXES = {
+    ".c", ".cc", ".cpp", ".cs", ".css", ".dart", ".go", ".h", ".hpp",
+    ".html", ".java", ".js", ".jsx", ".json", ".kt", ".kts", ".md",
+    ".php", ".py", ".rb", ".rs", ".scala", ".sh", ".sql", ".swift",
+    ".toml", ".ts", ".tsx", ".vue", ".xml", ".yaml", ".yml",
+}
+MANIFEST_NAMES = {
+    "Dockerfile", "Gemfile", "Makefile", "Pipfile", "build.gradle",
+    "build.gradle.kts", "composer.json", "go.mod", "package.json",
+    "pom.xml", "pyproject.toml", "requirements.txt", "settings.gradle",
+}
+MAX_SCANNED_TEXT_BYTES = 512_000
+STOP_WORDS = {
+    "about", "after", "again", "change", "changes", "code", "from", "into",
+    "meeting", "project", "repository", "should", "that", "this", "user", "with",
+}
 
 
 def find_project_root(start: Path | None = None) -> Path:
@@ -153,6 +182,70 @@ def build_codebase_map(root: Path | None = None) -> tuple[dict[str, object], int
             code_symbols.extend(extract_python_symbols(file_path, project_root))
 
     return {"file_tree": file_tree, "code_symbols": code_symbols}, files_scanned
+
+
+def _issue_terms(issue_summary: str) -> set[str]:
+    return {
+        word
+        for word in re.findall(r"[A-Za-z_][A-Za-z0-9_-]+", issue_summary.lower())
+        if len(word) >= 3 and word not in STOP_WORDS
+    }
+
+
+def _read_text_excerpt(path: Path, max_chars: int) -> str:
+    try:
+        if path.stat().st_size > MAX_SCANNED_TEXT_BYTES:
+            return ""
+        return path.read_text(encoding="utf-8")[:max_chars]
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def build_repository_context(
+    root: str | Path,
+    issue_summary: str,
+    *,
+    max_relevant_files: int = 12,
+    max_chars_per_file: int = 4_000,
+) -> dict[str, object]:
+    """Build framework-neutral, issue-ranked context for the agent workflow."""
+    project_root = Path(root).resolve()
+    file_tree, files_scanned = build_file_tree(project_root)
+    terms = _issue_terms(issue_summary)
+    candidates: list[tuple[int, str, dict[str, object]]] = []
+
+    for file_path in iter_repo_files(project_root):
+        if file_path.suffix.lower() not in TEXT_SUFFIXES and file_path.name not in MANIFEST_NAMES:
+            continue
+        relative = file_path.relative_to(project_root).as_posix()
+        excerpt = _read_text_excerpt(file_path, max_chars_per_file)
+        if not excerpt and file_path.stat().st_size:
+            continue
+        lowered_path = relative.lower()
+        lowered_excerpt = excerpt.lower()
+        score = sum(8 for term in terms if term in lowered_path)
+        score += sum(min(lowered_excerpt.count(term), 5) for term in terms)
+        if file_path.name.lower().startswith("readme") or file_path.name in MANIFEST_NAMES:
+            score += 2
+        symbols: list[str] = []
+        if file_path.suffix.lower() == ".py":
+            symbols = [str(item["name"]) for item in extract_python_symbols(file_path, project_root)]
+        line_count = excerpt.count("\n") + (1 if excerpt else 0)
+        context = {
+            "path": relative,
+            "summary": f"{file_path.suffix.lower() or 'text'} file; {file_path.stat().st_size} bytes; at least {line_count} lines scanned.",
+            "symbols": symbols,
+            "content_excerpt": excerpt,
+        }
+        candidates.append((score, relative.lower(), context))
+
+    candidates.sort(key=lambda item: (-item[0], item[1]))
+    return {
+        "repo_tree": file_tree,
+        "relevant_files": [item[2] for item in candidates[: max(1, max_relevant_files)]],
+        "files_scanned": files_scanned,
+        "context_files_selected": min(len(candidates), max(1, max_relevant_files)),
+    }
 
 
 def save_codebase_map(payload: dict[str, object], root: Path | None = None) -> Path:
