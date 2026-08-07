@@ -1,0 +1,8 @@
+[project]
+name = "visionpr"
+version = "0.2.0"
+description = "Turn meeting evidence into reviewed GitHub pull requests."
+requires-python = ">=3.12,<3.15"
+
+[tool.vercel]
+entrypoint = "backend.app:app"
