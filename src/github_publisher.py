@@ -321,6 +321,12 @@ def _slug(value: str, fallback: str = "change") -> str:
     return (result or fallback)[:48].rstrip("-")
 
 
+def _run_branch_suffix(run_id: str) -> str:
+    readable = _slug(run_id, "run")[:12].rstrip("-")
+    digest = hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:10]
+    return f"{readable}-{digest}"
+
+
 def create_or_checkout_feature_branch(
     repo_path: Path,
     run_id: str,
@@ -328,7 +334,7 @@ def create_or_checkout_feature_branch(
     base_branch: str | None = None,
     remote_name: str | None = None,
 ) -> str:
-    safe_run = _slug(run_id, "run")[:12]
+    safe_run = _run_branch_suffix(run_id)
     branch = f"visionpr/{_slug(change_name)}-{safe_run}"
     ownership_key = f"branch.{branch}.visionpr-run"
 

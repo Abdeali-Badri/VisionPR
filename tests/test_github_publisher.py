@@ -84,9 +84,21 @@ class GitSafetyTests(RepositoryCase):
         branch = publisher.create_or_checkout_feature_branch(
             self.repo, "run-123456789", "Update Navbar", "main", "origin"
         )
-        self.assertEqual("visionpr/update-navbar-run-12345678", branch)
+        self.assertTrue(branch.startswith("visionpr/update-navbar-run-12345678-"))
         self.assertEqual(git(self.repo, "rev-parse", "origin/main"), git(self.repo, "rev-parse", "HEAD"))
         self.assertEqual(branch, publisher.create_or_checkout_feature_branch(self.repo, "run-123456789", "Update Navbar"))
+
+    def test_feature_branches_do_not_collide_when_web_run_prefixes_match(self):
+        first = publisher.create_or_checkout_feature_branch(
+            self.repo, "web-202608070001-task-01", "Update Navbar", "main", "origin"
+        )
+        second = publisher.create_or_checkout_feature_branch(
+            self.repo, "web-202608070002-task-01", "Update Navbar", "main", "origin"
+        )
+
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.startswith("visionpr/update-navbar-web-20260807-"))
+        self.assertTrue(second.startswith("visionpr/update-navbar-web-20260807-"))
 
     def test_atomic_state_redacts_token(self):
         path = publisher.save_state_atomic({"run_id": "run-1", "note": "test-token-secret"})
