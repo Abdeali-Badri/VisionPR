@@ -1,5 +1,12 @@
+const apiBaseUrl = (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '')
+
+export const apiUrl = (path: string): string => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${apiBaseUrl}${normalizedPath}`
+}
+
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     credentials: 'include',
     ...options,
     headers: options.body instanceof FormData ? options.headers : { 'Content-Type': 'application/json', ...options.headers },

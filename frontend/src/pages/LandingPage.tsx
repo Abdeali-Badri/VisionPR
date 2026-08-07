@@ -1,5 +1,6 @@
 import { ArrowRight, Blocks, Bot, Code2, ExternalLink, Github, LayoutGrid, LogIn, LogOut, ShieldCheck, Sparkles, Users } from 'lucide-react'
 import { Link } from '../router'
+import { apiUrl } from '../api'
 import { Logo } from '../components/Logo'
 import { PixelRidge } from '../components/PixelRidge'
 import type { User } from '../types'
@@ -28,7 +29,7 @@ export function LandingPage({ authenticated = false, user, onLogout }: { authent
               <Link className="button button-quiet nav-dashboard" to="/dashboard"><LayoutGrid size={16} /> Dashboard</Link>
               <button className="button button-quiet nav-signout" onClick={onLogout}><LogOut size={16} /> Sign out</button>
             </div>
-          ) : <a className="button button-quiet nav-signin" href="/api/auth/github/start"><LogIn size={17} /> Sign in</a>}
+          ) : <a className="button button-quiet nav-signin" href={apiUrl('/api/auth/github/start')}><LogIn size={17} /> Sign in</a>}
         </header>
 
         <div className="hero-copy">

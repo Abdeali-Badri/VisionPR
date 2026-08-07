@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 
-from backend.app import app
+from backend.app import app, cookie_samesite
 from backend.database import db
 from backend.services import create_session
 
@@ -64,6 +64,11 @@ class WebApiTests(unittest.TestCase):
         query = parse_qs(urlparse(response.headers["location"]).query)
         self.assertEqual(["select_account"], query["prompt"])
         self.assertIn("visionpr_oauth_state", response.headers["set-cookie"])
+
+    def test_secure_cross_origin_deployment_uses_none_samesite(self):
+        with patch("backend.app.settings") as configured:
+            configured.cookie_secure = True
+            self.assertEqual("none", cookie_samesite())
 
     def test_creates_and_reads_repository_review(self):
         response = self.client.post(

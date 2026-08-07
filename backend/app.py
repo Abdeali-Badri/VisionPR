@@ -36,6 +36,10 @@ SESSION_COOKIE = "visionpr_session"
 OAUTH_COOKIE = "visionpr_oauth_state"
 
 
+def cookie_samesite() -> str:
+    return "none" if settings.cookie_secure else "lax"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -114,7 +118,7 @@ async def github_start() -> Response:
         }
     )
     response = RedirectResponse(f"https://github.com/login/oauth/authorize?{query}")
-    response.set_cookie(OAUTH_COOKIE, oauth_state, httponly=True, samesite="lax", secure=settings.cookie_secure, max_age=600)
+    response.set_cookie(OAUTH_COOKIE, oauth_state, httponly=True, samesite=cookie_samesite(), secure=settings.cookie_secure, max_age=600)
     return response
 
 
@@ -144,7 +148,7 @@ async def github_callback(code: str, state: str, visionpr_oauth_state: Annotated
     user = upsert_user(profile_response.json(), token)
     session_id = create_session(int(user["id"]))
     response = RedirectResponse(f"{settings.frontend_url}/dashboard?connected=1")
-    response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="lax", secure=settings.cookie_secure, max_age=604800)
+    response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite=cookie_samesite(), secure=settings.cookie_secure, max_age=604800)
     response.delete_cookie(OAUTH_COOKIE)
     return response
 
