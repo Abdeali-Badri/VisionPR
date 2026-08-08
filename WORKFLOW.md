@@ -4,16 +4,38 @@ VisionPR converts a meeting recording, screen recording, or visual bug report in
 
 ## End-To-End Flow
 
-```text
-Recording
-  -> Phase 1: transcript, key points, screenshots, visual analysis
-  -> Phase 2: repository context mapping
-  -> agentic_input JSON
-  -> Phase 3: Architect -> Coder -> Reviewer patch loop
-  -> Phase 4: branch, commit, push, and PR creation
-  -> Phase 5: human review gate
-  -> approval or correction loop
+```mermaid
+flowchart TD
+    A["GitHub OAuth sign-in"] --> B["Create review"]
+    B --> C["Attach public repository"]
+    C --> D{"Evidence source"}
+    D -->|Recording| E["Upload media"]
+    D -->|YouTube| F["Resolve media"]
+    D -->|Intelligence JSON| G["Load prepared intelligence"]
+    E --> H["Transcribe and translate"]
+    F --> H
+    H --> I["Extract timestamped change requests"]
+    I --> J["Capture and analyze screenshots"]
+    G --> K["Create task queue"]
+    J --> K
+    K --> L["Clone or fork repository"]
+    L --> M["Map relevant code"]
+    M --> N["Architect Agent"]
+    N --> O["Coder Agent"]
+    O --> P["Build and safety checks"]
+    P --> Q["Reviewer Agent"]
+    Q -->|Needs revision| O
+    Q -->|Approved| R["Branch, commit, push, and PR"]
+    R --> S{"Human decision"}
+    S -->|Request changes| T["Revise the same PR"]
+    T --> P
+    S -->|Accept| U["Enable explicit merge"]
+    U --> V["Merge and final report"]
 ```
+
+Each web review receives a unique `run_id`. The run ID links its evidence,
+repository workspace, task results, branch ownership, pull request, timeline,
+and generated reports.
 
 ## Phase 1: Multimodal Intelligence Extraction
 
@@ -26,6 +48,21 @@ Recording
 7. Extract screenshot frames around the timestamp.
 8. Analyze screenshots for UI state, errors, files, controls, and visible behavior.
 9. Save the transcript, key points, screenshots, and visual analysis as `video_intelligence.json`.
+
+Supported recording formats include `.mp4`, `.mov`, `.mkv`, `.avi`, `.webm`,
+and `.m4v`. If the meeting contains no explicit software change request, the
+workflow ends with `NO_ACTIONABLE_TASKS` and does not create a branch or PR.
+
+## Repository Acquisition
+
+VisionPR accepts public GitHub URLs and `owner/repository` references. It reads
+repository metadata, detects the default branch, and creates an isolated local
+clone for the run.
+
+The authenticated GitHub user is selected through OAuth. VisionPR pushes
+directly when the user has permission. When upstream is read-only, it creates or
+reuses a user-owned fork and opens the PR from that fork. The LLM never edits the
+remote repository directly; all model changes happen inside the managed clone.
 
 ## Phase 2: Repository Context Mapping
 
@@ -83,7 +120,7 @@ Reviewer Agent:
 
 If review fails, the workflow creates a `revision_request` with the original plan, reviewer feedback, build logs, previous modified files, and the retry attempt number. The loop continues until approval or the retry limit.
 
-## Phase 4: Pull Request Publishing
+## Pull Request Publishing
 
 1. Validate the approved agent workflow result.
 2. Confirm build and test status.
@@ -103,10 +140,15 @@ If review fails, the workflow creates a `revision_request` with the original pla
 Branch format:
 
 ```text
-visionpr/<requirement-slug>-<run-id-prefix>
+visionpr/<requirement-slug>-<run-id-prefix>-<run-hash>
 ```
 
-## Phase 5: Human Review Gate
+The hash is derived from the complete run ID. It keeps branch names readable
+while preventing reviews created on the same day from colliding. Existing
+branches are reused only when their Git metadata or commit trailers prove that
+they belong to the same VisionPR run.
+
+## Human Review Gate
 
 1. Fetch the latest PR state.
 2. Check human reviews, inline comments, and actionable issue comments.
@@ -121,6 +163,39 @@ visionpr/<requirement-slug>-<run-id-prefix>
 11. Post an iteration summary.
 12. Return to review until approved, merged, closed, stopped, or errored.
 
+The web application exposes two separate human actions:
+
+- **Request changes** posts feedback and runs another correction against the
+  same PR branch.
+- **Accept changes** marks the reviewed implementation as accepted but does not
+  merge it.
+
+After acceptance, the user must explicitly confirm a merge. VisionPR marks the
+review `MERGED` only after GitHub confirms that the merge succeeded.
+
+## Review Status Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT
+    DRAFT --> READY: Evidence and tasks confirmed
+    READY --> QUEUED: Start review
+    QUEUED --> PROCESSING: Worker starts
+    PROCESSING --> NO_ACTIONABLE_TASKS: No explicit change found
+    PROCESSING --> AWAITING_HUMAN_REVIEW: PR opened
+    PROCESSING --> REVIEW_FAILED: Agent review rejected
+    PROCESSING --> BUILD_FAILED: Validation failed
+    PROCESSING --> ERROR: Provider, repository, or publishing failure
+    AWAITING_HUMAN_REVIEW --> CHANGES_REQUESTED: Human feedback
+    CHANGES_REQUESTED --> APPLYING_FEEDBACK: Revision starts
+    APPLYING_FEEDBACK --> AWAITING_HUMAN_REVIEW: Same PR updated
+    AWAITING_HUMAN_REVIEW --> ACCEPTED: Human accepts
+    ACCEPTED --> MERGED: Human confirms merge
+```
+
+Failed reviews expose a Retry action. Retry uses the existing review evidence
+and starts repository work from a clean managed clone.
+
 ## Data Handoffs
 
 - `video_intelligence.json`: Transcript, screenshots, and visual analysis.
@@ -133,6 +208,10 @@ visionpr/<requirement-slug>-<run-id-prefix>
 - `revision_request`: Feedback bundle for retry attempts.
 - `pr_state`: Persisted PR review state.
 
+Workflow reports are also written in JSON and Markdown under `data/reports/`.
+They contain run metadata, task timestamps, changed files, implementation
+summaries, validation outcomes, PR links, and failure details.
+
 ## Safety Boundaries
 
 - File operations stay inside the target repository.
@@ -143,3 +222,58 @@ visionpr/<requirement-slug>-<run-id-prefix>
 - Secrets are redacted from persisted or published text.
 - Pull Requests require human review.
 - VisionPR does not merge automatically.
+
+## Expected No-PR Outcomes
+
+Not every completed analysis should create a pull request.
+
+| Condition | Result |
+|---|---|
+| No explicit software request | `NO_ACTIONABLE_TASKS`; report only |
+| Requested change already exists | No duplicate PR because the Git diff is empty |
+| Build or test failure | Publication is blocked |
+| Unsafe or unrelated path | Publication is blocked |
+| Branch belongs to another run | Publication is blocked by ownership checks |
+| GitHub authentication or fork failure | Review enters `ERROR` |
+| LLM provider rate limit | Review enters `ERROR`; retry after provider reset |
+
+Groq quotas are measured in tokens at the organization and model level, not
+only by API-call count. Multiple keys in the same organization share the same
+organization quota.
+
+## Production Deployment
+
+```text
+Vercel
+  React + Vite frontend
+        |
+        | HTTPS requests with credentials
+        v
+Railway
+  FastAPI API + background workers
+        |
+        +-- /app/data/visionpr_web.db
+        +-- /app/data/web_uploads
+        +-- /app/data/visionpr_state
+```
+
+The Railway volume preserves users, reviews, uploads, reports, and PR state
+across deployments. Production configuration supplies the frontend and backend
+origins, secure cookie mode, GitHub OAuth credentials, LLM credentials, model
+selection, and persistent storage paths through environment variables.
+
+## Operating Checklist
+
+Before starting a review:
+
+1. Confirm the Railway deployment is online.
+2. Confirm the Vercel frontend points to the Railway API.
+3. Confirm GitHub OAuth uses the Railway callback URL.
+4. Confirm the selected LLM organization has available token quota.
+5. Use a repository where the requested change is not already present.
+6. Keep the repository and meeting requirement aligned.
+7. Review the generated diff and validation result before accepting.
+8. Accept the change before using the separate Merge action.
+
+VisionPR succeeds only when the path from meeting evidence to repository change
+remains traceable, validated, and controlled by a human reviewer.
