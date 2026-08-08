@@ -95,6 +95,7 @@ class WebApiTests(unittest.TestCase):
 
     def test_accept_requires_a_separate_merge_action(self):
         seeded = self.client.get("/api/reviews").json()[0]
+        db.execute("UPDATE reviews SET status='AWAITING_HUMAN_REVIEW' WHERE id=?", (seeded["id"],))
         response = self.client.post(
             f"/api/reviews/{seeded['id']}/accept",
             json={"confirmation": "ACCEPT"},
