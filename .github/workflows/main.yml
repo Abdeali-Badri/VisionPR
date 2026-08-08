@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    name: build-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv pip install --system -r requirements.txt
+
+      - name: Install pytest
+        if: ${{ hashFiles('tests/**/*.py') != '' }}
+        run: uv pip install --system pytest
+
+      - name: Smoke test imports
+        run: python -c "import ast, json, os; import sys; sys.path.insert(0, 'src'); import codebase_mapper"
+
+      - name: Run pytest
+        if: ${{ hashFiles('tests/**/*.py') != '' }}
+        run: pytest

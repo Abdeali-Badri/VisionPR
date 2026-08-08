@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from src.generate_summary import load_agent_result, load_transcript
 from src.github_publisher import VisionPRError, publish_pull_request
 from src.hitl_review_gate import run_human_review_gate
 

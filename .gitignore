@@ -18,3 +18,5 @@ playwright-report/
 test-results/
 data/*-desktop.png
 data/*-mobile.png
+.pyc
+*.pyc
