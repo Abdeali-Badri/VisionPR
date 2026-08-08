@@ -103,6 +103,18 @@ class WebApiTests(unittest.TestCase):
         self.assertEqual({"status": "ACCEPTED", "merge_available": True}, response.json())
         self.assertEqual("ACCEPTED", self.client.get(f"/api/reviews/{seeded['id']}").json()["status"])
 
+    def test_accept_rejects_reviews_with_pending_change_requests(self):
+        seeded = self.client.get("/api/reviews").json()[0]
+        db.execute("UPDATE reviews SET status='CHANGES_REQUESTED' WHERE id=?", (seeded["id"],))
+
+        response = self.client.post(
+            f"/api/reviews/{seeded['id']}/accept",
+            json={"confirmation": "ACCEPT"},
+        )
+
+        self.assertEqual(409, response.status_code)
+        self.assertEqual("CHANGES_REQUESTED", self.client.get(f"/api/reviews/{seeded['id']}").json()["status"])
+
     def test_feedback_posts_comment_and_starts_correction_worker(self):
         seeded = self.client.get("/api/reviews").json()[0]
         pull = Mock()

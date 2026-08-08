@@ -300,7 +300,7 @@ async def request_changes(review_id: int, payload: FeedbackCreate, user: Annotat
 @app.post("/api/reviews/{review_id}/accept")
 async def accept_review(review_id: int, _: AcceptRequest, user: Annotated[dict[str, Any], Depends(current_user)]) -> dict[str, Any]:
     review = review_detail(review_id)
-    if not review or review.get("status") not in {"AWAITING_HUMAN_REVIEW", "PR_OPENED", "CHANGES_REQUESTED"}:
+    if not review or review.get("status") not in {"AWAITING_HUMAN_REVIEW", "PR_OPENED"}:
         raise HTTPException(status_code=409, detail="This pull request is not ready to accept.")
     db.execute("UPDATE reviews SET status='ACCEPTED',updated_at=? WHERE id=?", (utc_now(), review_id))
     db.execute("UPDATE review_tasks SET status='accepted' WHERE review_id=?", (review_id,))
